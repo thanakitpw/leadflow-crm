@@ -12,9 +12,16 @@ class Settings(BaseSettings):
     # Google Places
     google_places_api_key: str = ""
 
+    # Resend Email API
+    resend_api_key: str = ""
+
     # App
     python_api_url: str = "http://localhost:8000"
     next_app_url: str = "http://localhost:3000"
+
+    # Tracking URLs
+    app_url: str = "http://localhost:3000"   # Next.js app URL (unsubscribe page)
+    api_url: str = "http://localhost:8000"   # Python API URL (tracking pixel/click)
 
     # CORS — comma-separated list of allowed origins
     cors_origins: str = "http://localhost:3000"

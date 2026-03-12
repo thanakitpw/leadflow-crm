@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.v1.endpoints import health, places, enrichment, scoring, orchestrator
+from app.api.v1.endpoints import health, places, enrichment, scoring, orchestrator, email, tracking
 
 app = FastAPI(
     title="LeadFlow Python API",
@@ -32,6 +32,12 @@ app.include_router(scoring.router, prefix="/api/v1")
 
 # Orchestrator — Full pipeline: search → enrich → score → save
 app.include_router(orchestrator.router, prefix="/api/v1", tags=["Orchestrator"])
+
+# Email Writer + Sender — Phase 3
+app.include_router(email.router, prefix="/api/v1", tags=["Email"])
+
+# Tracking — Open/Click tracking, Unsubscribe, Resend webhook
+app.include_router(tracking.router, prefix="/api/v1", tags=["Tracking"])
 
 
 @app.get("/")

@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
-  Mail,
-  Megaphone,
+  MailOpen,
+  FileText,
+  GitBranch,
   Settings,
   LogOut,
   ChevronDown,
@@ -45,12 +46,17 @@ function getNavItems(workspaceId: string): NavItem[] {
     {
       href: `/${workspaceId}/campaigns`,
       label: "Campaigns",
-      icon: Megaphone,
+      icon: MailOpen,
     },
     {
-      href: `/${workspaceId}/email`,
-      label: "Email",
-      icon: Mail,
+      href: `/${workspaceId}/templates`,
+      label: "Templates",
+      icon: FileText,
+    },
+    {
+      href: `/${workspaceId}/sequences`,
+      label: "Sequences",
+      icon: GitBranch,
     },
     {
       href: `/${workspaceId}/settings`,

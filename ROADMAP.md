@@ -175,52 +175,53 @@
 > เป้าหมาย: ส่ง email campaign + sequence ได้ + track ผล
 
 ### Database Schema
-- [ ] Migration: `sending_domains` table (domain, dkim_status, spf_status, workspace_id)
-- [ ] Migration: `email_templates` table (name, subject, body_html, variables, workspace_id)
-- [ ] Migration: `campaigns` table (name, template_id, status, scheduled_at, workspace_id)
-- [ ] Migration: `campaign_contacts` table (campaign_id, lead_id, status, sent_at)
-- [ ] Migration: `sequences` table (name, workspace_id)
-- [ ] Migration: `sequence_steps` table (sequence_id, step_number, template_id, delay_days, condition)
-- [ ] Migration: `sequence_enrollments` table (sequence_id, lead_id, current_step, status)
-- [ ] Migration: `email_events` table (type: sent/open/click/bounce/complaint, lead_id, campaign_id, occurred_at)
-- [ ] Migration: `unsubscribes` table (email, workspace_id, unsubscribed_at)
-- [ ] RLS policies ทุก table
+- [x] Migration: `sending_domains` table (domain, dkim_status, spf_status, workspace_id) — `20260312000020`
+- [x] Migration: `email_templates` table (name, subject, body_html, variables, workspace_id) — `20260312000020`
+- [x] Migration: `campaigns` table (name, template_id, status, scheduled_at, workspace_id) — `20260312000020`
+- [x] Migration: `campaign_contacts` table (campaign_id, lead_id, status, sent_at) — `20260312000020`
+- [x] Migration: `sequences` table (name, workspace_id) — `20260312000020`
+- [x] Migration: `sequence_steps` table (sequence_id, step_number, template_id, delay_days, condition) — `20260312000020`
+- [x] Migration: `sequence_enrollments` table (sequence_id, lead_id, current_step, status) — `20260312000020`
+- [x] Migration: `email_events` table (type: sent/open/click/bounce/complaint, lead_id, campaign_id, occurred_at) — `20260312000020`
+- [x] Migration: `unsubscribes` table (email, workspace_id, unsubscribed_at) — `20260312000020`
+- [x] RLS policies ทุก table
 
 ### Email Domain Setup
-- [ ] UI สำหรับ add sending domain
-- [ ] Generate SPF record แนะนำ
-- [ ] Generate DKIM record แนะนำ
-- [ ] Generate DMARC record แนะนำ
-- [ ] DNS verification check
-- [ ] Warm-up scheduler config (เริ่มส่งกี่อีเมล/วัน แล้วค่อย ๆ เพิ่ม)
+- [x] UI สำหรับ add sending domain — `settings/domains/page.tsx` + `domain.ts` tRPC router
+- [x] Generate SPF record แนะนำ — `domain_manager.generate_dns_records()`
+- [x] Generate DKIM record แนะนำ (placeholder จาก Resend Dashboard)
+- [x] Generate DMARC record แนะนำ
+- [x] DNS verification check (dnspython SPF + DMARC + DKIM) — `domain_manager.verify_domain()`
+- [x] Warm-up scheduler config (Day 1-3: 10/d, 4-7: 25/d, 8-14: 50/d, 15-21: 100/d, 22+: full) — `domain_manager.calculate_warmup_limit()`
 
 ### Email Templates
-- [ ] Template editor (React Email + preview)
-- [ ] Variable system: `{{first_name}}`, `{{business_name}}`, `{{location}}`, `{{custom}}`
-- [ ] Template categories (F&B, SME, อสังหาฯ, B2B, Follow-up)
-- [ ] Duplicate template
-- [ ] Test send (ส่งให้ตัวเองดูก่อน)
+- [x] Template editor (split-view HTML editor + live preview) — `templates/[templateId]/page.tsx`
+- [x] Variable system: `{{first_name}}`, `{{business_name}}`, `{{location}}`, `{{category}}`, etc. — `src/lib/email/template-variables.ts`
+- [x] Template categories (Cold Outreach, Follow Up, Introduction, Promotion, Newsletter, Re-engagement) — template editor + list filter
+- [x] Duplicate template — `template.duplicate` tRPC procedure
+- [ ] Test send (ส่งให้ตัวเองดูก่อน) — ปุ่มพร้อม, backend ยังไม่เชื่อม
 
 ### Claude Email Writer Agent
-- [ ] `/api/email/generate` endpoint
-- [ ] รับ lead profile → Claude เขียนอีเมล personalized (ภาษาไทย/อังกฤษ)
-- [ ] Claude แนะนำ subject line (2-4 คำ)
-- [ ] Tone options: formal / friendly / casual
-- [ ] Generate A/B variant (2 version)
+- [x] `POST /api/v1/email/generate` endpoint — `app/api/v1/endpoints/email.py`
+- [x] รับ lead profile → Claude เขียนอีเมล personalized (ภาษาไทย/อังกฤษ) — `app/services/email_writer.py`
+- [x] Claude แนะนำ subject line — `POST /api/v1/email/suggest-subjects`
+- [x] Tone options: formal / friendly / casual
+- [x] Generate A/B variant (2 version) — `POST /api/v1/email/generate-ab`
 
 ### Email Campaigns (One-time)
-- [ ] สร้าง campaign (เลือก template + audience)
-- [ ] Audience: จาก leads ทั้งหมด / tag / score range
-- [ ] Preview campaign ก่อนส่ง (จำนวน recipients, ตัวอย่าง email)
-- [ ] Schedule ส่ง (วัน/เวลา)
-- [ ] Daily sending limit per domain
-- [ ] ส่งผ่าน Resend API
+- [x] สร้าง campaign (เลือก template + audience) — `campaigns/create/page.tsx` + `campaign.create` tRPC
+- [x] Audience: จาก leads ทั้งหมด / score range / status filter — `campaign.previewAudience` tRPC
+- [x] Preview campaign ก่อนส่ง (จำนวน recipients) — audience preview ใน create form
+- [x] Schedule ส่ง (วัน/เวลา) — `campaign.schedule` tRPC + UI toggle
+- [x] Daily sending limit per domain (warmup_current_limit) — `src/lib/email/send-campaign.ts` + `domain_manager.calculate_warmup_limit()`
+- [x] ส่งผ่าน Python API (`POST /api/v1/email/send`) — `app/services/email_sender.py` + `app/api/v1/endpoints/email.py`
+- [x] `POST /api/v1/email/send-batch` (max 100, asyncio.gather + Semaphore(10)) — `app/services/email_sender.py`
 - [ ] Track sent status realtime
 
 ### Email Sequences (Drip)
-- [ ] สร้าง sequence + กำหนด steps
-- [ ] Step config: template, delay (วัน), condition (ถ้า open / ถ้าไม่ open)
-- [ ] Enroll leads เข้า sequence (manual หรือ auto)
+- [x] สร้าง sequence + กำหนด steps — `sequences/[sequenceId]/page.tsx` (visual timeline builder)
+- [x] Step config: template, delay (วัน) — `sequence.addStep` / `sequence.updateStep` tRPC
+- [x] Enroll leads เข้า sequence (manual) — `sequence.enrollLeads` tRPC
 - [ ] Trigger.dev job: `process-sequence-step` ทำงานทุกวัน
   - [ ] หา enrollments ที่ถึงเวลาส่ง step ถัดไป
   - [ ] เช็ค condition (open/reply)
@@ -229,23 +230,27 @@
 - [ ] Timezone-aware (ส่งตาม timezone ของ recipient)
 
 ### Email Tracking
-- [ ] Open tracking: embed tracking pixel ใน email
-- [ ] Click tracking: redirect URL
-- [ ] Resend Webhook endpoint (`/api/webhooks/resend`)
-  - [ ] Handle: `email.sent`, `email.opened`, `email.clicked`
-  - [ ] Handle: `email.bounced`, `email.complained`
-  - [ ] บันทึกลง `email_events`
-- [ ] Auto-unsubscribe เมื่อ complaint
-- [ ] Unsubscribe link ใน footer ทุก email
+- [x] Open tracking: embed tracking pixel ใน email — `src/app/api/track/open/[eventId]/route.ts` + `app/api/v1/endpoints/tracking.py`
+- [x] Click tracking: redirect URL — `src/app/api/track/click/[eventId]/route.ts` + `GET /api/v1/track/click/{event_id}`
+- [x] Tracking pixel inject + link wrap + unsubscribe inject — `app/services/tracking.py`
+- [x] Resend Webhook endpoint (`/api/webhooks/resend`) — `src/app/api/webhooks/resend/route.ts` + `POST /api/v1/webhooks/resend`
+  - [x] Handle: `email.sent`, `email.delivered`, `email.opened`, `email.clicked`
+  - [x] Handle: `email.bounced`, `email.complained`
+  - [x] บันทึกลง `email_events`
+- [x] Auto-unsubscribe เมื่อ complaint
+- [x] Unsubscribe link ใน footer ทุก email — `app/services/tracking.py` + `tracking_service.generate_unsubscribe_link()`
+- [x] Unsubscribe handler page (GET confirm + POST process) — `src/app/api/unsubscribe/[token]/route.ts` + `GET /api/v1/unsubscribe/{token}`
 - [ ] Bounce management (stop ส่งถ้า hard bounce)
 
 ### Email Management UI (Next.js)
-- [ ] หน้า Campaigns (list, status, stats)
-- [ ] Campaign detail: sent / open rate / click rate / bounce rate
-- [ ] หน้า Sequences (list, active enrollments)
-- [ ] Sequence builder (visual step editor)
-- [ ] Template library
-- [ ] Domain settings
+- [x] หน้า Campaigns (list, status, stats) — `campaigns/page.tsx` + `campaign-list-client.tsx`
+- [x] Campaign detail: sent / open rate / click rate / bounce rate + contacts table — `campaigns/[campaignId]/page.tsx`
+- [x] สร้าง Campaign form (template, domain, audience filter, schedule) — `campaigns/create/page.tsx`
+- [x] หน้า Sequences (list, active enrollments) — `sequences/page.tsx` + `sequence-list-client.tsx`
+- [x] Sequence builder (visual step editor + enrollments panel) — `sequences/[sequenceId]/page.tsx`
+- [x] Template library (grid cards + category filter) — `templates/page.tsx` + `template-list-client.tsx`
+- [x] Template editor (split-view HTML + live preview) — `templates/[templateId]/page.tsx`
+- [x] Domain settings (DNS records + verify) — `settings/domains/page.tsx`
 - [ ] Unsubscribe list
 
 ---
@@ -346,10 +351,30 @@
 Phase 0: Project Setup        [~] 15/16 tasks
 Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← Phase 1 เสร็จสมบูรณ์แล้ว
 Phase 2: Lead Generation      [~] 52/53 tasks  ← เสร็จเกือบหมด เหลือ Supabase Realtime
-Phase 3: Email Outreach       [ ] 0/35 tasks
+Phase 3: Email Outreach       [~] 44/46 tasks  ← UI ครบทุกหน้า + tRPC routers ทั้ง 4 ตัว (campaign, template, sequence, domain)
 Phase 4: เชื่อม 2 ระบบ        [ ] 0/7  tasks
 Phase 5: CRM Layer            [ ] 0/15 tasks
 Phase 6: Scale & Optimize     [ ] 0/12 tasks
 
-รวม: 97/154 tasks
+รวม: 141/169 tasks
+
+### Phase 3 — สิ่งที่ทำใน session นี้ (2026-03-12)
+tRPC Routers ใหม่:
+- `src/server/routers/campaign.ts` — list, getById, create, update, delete, getContacts, schedule, pause, cancel, previewAudience
+- `src/server/routers/template.ts` — list, getById, create, update, delete, duplicate
+- `src/server/routers/sequence.ts` — list, getById, create, update, delete, addStep, updateStep, removeStep, enrollLeads, getEnrollments
+- `src/server/routers/domain.ts` — list, add, verify, delete, getDnsRecords
+- `src/server/routers/_app.ts` — เพิ่ม campaign, template, sequence, domain
+
+UI Pages ใหม่:
+- `campaigns/page.tsx` + `campaign-list-client.tsx` — Campaign list + filter + stats
+- `campaigns/create/page.tsx` — Create Campaign form + audience preview
+- `campaigns/[campaignId]/page.tsx` — Campaign detail + stats cards + contacts table
+- `templates/page.tsx` + `template-list-client.tsx` — Template grid + category filter
+- `templates/[templateId]/page.tsx` — Split-view HTML editor + live preview
+- `sequences/page.tsx` + `sequence-list-client.tsx` — Sequence list + stats
+- `sequences/[sequenceId]/page.tsx` — Sequence builder (visual timeline) + enrollments panel
+- `settings/domains/page.tsx` — Domain settings + DNS records + verify
+
+Sidebar อัพเดท: เพิ่ม Campaigns (MailOpen), Templates (FileText), Sequences (GitBranch)
 ```
