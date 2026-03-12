@@ -136,10 +136,13 @@
 - [x] Schemas: `app/schemas/scoring.py` (LeadForScoring, ScoreResult, ScoreLeadRequest/Response, ScoreBatchRequest/Response)
 
 ### Agent Orchestration
-- [ ] Orchestrator Agent รับ search request
-- [ ] Lead Finder Agent ค้นหา + cache
-- [ ] Enrichment Agents run แบบ parallel (asyncio)
-- [ ] Scoring Agent process batch
+- [x] Orchestrator Agent รับ search request — `app/services/orchestrator.py` + `app/api/v1/endpoints/orchestrator.py`
+- [x] Lead Finder Agent ค้นหา + cache — `_search_places_cached()` ใน orchestrator service
+- [x] Enrichment Agents run แบบ parallel (asyncio) — `_enrich_emails()` ด้วย Semaphore(3) + timeout 30s
+- [x] Scoring Agent process batch — `_score_leads()` เรียก `score_leads_batch()` + fallback
+- [x] Supabase REST API helper — `app/services/supabase_client.py` (insert, insert_many, select, upsert, check_exists)
+- [x] บันทึก leads + lead_scores ลง Supabase ด้วย ON CONFLICT upsert — `_save_leads()` ใน orchestrator
+- [x] Schemas: `app/schemas/orchestrator.py` (OrchestrationRequest, EnrichedLead, OrchestrationResponse)
 - [ ] อัพเดทสถานะ lead realtime (Supabase Realtime)
 
 ### Lead Management UI (Next.js)
@@ -342,11 +345,11 @@
 ```
 Phase 0: Project Setup        [~] 15/16 tasks
 Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← Phase 1 เสร็จสมบูรณ์แล้ว
-Phase 2: Lead Generation      [~] 45/49 tasks  ← เหลือ Agent Orchestration (4 tasks)
+Phase 2: Lead Generation      [~] 52/53 tasks  ← เสร็จเกือบหมด เหลือ Supabase Realtime
 Phase 3: Email Outreach       [ ] 0/35 tasks
 Phase 4: เชื่อม 2 ระบบ        [ ] 0/7  tasks
 Phase 5: CRM Layer            [ ] 0/15 tasks
 Phase 6: Scale & Optimize     [ ] 0/12 tasks
 
-รวม: 90/147 tasks
+รวม: 97/154 tasks
 ```
