@@ -11,6 +11,13 @@ from app.schemas.scoring import (
     ScoreBatchRequest,
     ScoreBatchResponse,
 )
+from app.schemas.report import (
+    CampaignStat,
+    SummaryStats,
+    TopLead,
+    ReportGenerateRequest,
+    ReportGenerateResponse,
+)
 
 __all__ = [
     # Enrichment
@@ -24,4 +31,10 @@ __all__ = [
     "ScoreLeadResponse",
     "ScoreBatchRequest",
     "ScoreBatchResponse",
+    # Report
+    "CampaignStat",
+    "SummaryStats",
+    "TopLead",
+    "ReportGenerateRequest",
+    "ReportGenerateResponse",
 ]

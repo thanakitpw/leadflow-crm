@@ -15,6 +15,7 @@ import {
   Loader2,
   Filter,
   AlertTriangle,
+  GitBranch,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -166,6 +167,11 @@ export default function LeadListClient({
   // Export state
   const [exporting, setExporting] = useState(false)
 
+  // Enroll in Sequence dialog
+  const [enrollOpen, setEnrollOpen] = useState(false)
+  const [enrollSequenceId, setEnrollSequenceId] = useState<string>("")
+  const [enrolling, setEnrolling] = useState(false)
+
   // ดึงข้อมูล
   const fetchLeads = useCallback(async () => {
     setLoading(true)
@@ -235,6 +241,49 @@ export default function LeadListClient({
       toast.error(msg)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  // Sequence list for enroll dialog (load lazily when dialog opens)
+  const [sequences, setSequences] = useState<{ id: string; name: string }[] | null>(null)
+
+  // Load sequences when enroll dialog opens
+  const openEnrollDialog = () => {
+    setEnrollSequenceId("")
+    setEnrollOpen(true)
+    if (sequences === null) {
+      trpc.sequence.list.query({ workspaceId })
+        .then((result) => {
+          setSequences(result.sequences as { id: string; name: string }[])
+        })
+        .catch(() => setSequences([]))
+    }
+  }
+
+  // Enroll leads in sequence
+  const handleEnrollInSequence = async () => {
+    if (!enrollSequenceId) {
+      toast.error("กรุณาเลือก sequence")
+      return
+    }
+    setEnrolling(true)
+    try {
+      await trpc.sequence.enrollLeads.mutate({
+        workspaceId,
+        sequenceId: enrollSequenceId,
+        leadIds: Array.from(selectedIds),
+      })
+      toast.success(`เพิ่ม ${selectedIds.size} leads เข้า sequence แล้ว`)
+      setEnrollOpen(false)
+      setEnrollSequenceId("")
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "ไม่สามารถเพิ่ม leads เข้า sequence ได้"
+      toast.error(msg)
+    } finally {
+      setEnrolling(false)
     }
   }
 
@@ -324,6 +373,16 @@ export default function LeadListClient({
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" style={{ color: "#7C3AED" }} />
               ให้คะแนน AI
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={openEnrollDialog}
+              style={{ borderRadius: "var(--radius-btn)" }}
+            >
+              <GitBranch className="mr-1.5 h-3.5 w-3.5" style={{ color: "var(--color-info)" }} />
+              Enroll in Sequence
             </Button>
             <Button
               variant="outline"
@@ -586,6 +645,62 @@ export default function LeadListClient({
           </div>
         </div>
       )}
+
+      {/* Enroll in Sequence Dialog */}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent style={{ borderRadius: "var(--radius-modal)" }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "var(--color-ink)" }}>Enroll in Sequence</DialogTitle>
+            <DialogDescription style={{ color: "var(--color-muted)" }}>
+              เพิ่ม {selectedIds.size} leads ที่เลือกเข้า email sequence
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+              เลือก Sequence
+            </label>
+            <Select value={enrollSequenceId} onValueChange={setEnrollSequenceId}>
+              <SelectTrigger style={{ borderRadius: "var(--radius-input)" }}>
+                <SelectValue placeholder="เลือก sequence..." />
+              </SelectTrigger>
+              <SelectContent>
+                {!sequences || sequences.length === 0 ? (
+                  <div className="px-3 py-2 text-xs" style={{ color: "var(--color-muted)" }}>
+                    ยังไม่มี sequence — สร้างใน Sequences ก่อน
+                  </div>
+                ) : (
+                  (sequences as { id: string; name: string }[]).map((seq) => (
+                    <SelectItem key={seq.id} value={seq.id}>
+                      {seq.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEnrollOpen(false)}
+              disabled={enrolling}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleEnrollInSequence}
+              disabled={enrolling || !enrollSequenceId}
+              style={{ backgroundColor: "var(--color-primary)", borderRadius: "var(--radius-btn)" }}
+            >
+              {enrolling ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GitBranch className="mr-2 h-4 w-4" />
+              )}
+              Enroll {selectedIds.size} Leads
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

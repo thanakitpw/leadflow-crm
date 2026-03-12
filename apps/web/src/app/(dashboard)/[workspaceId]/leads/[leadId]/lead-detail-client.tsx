@@ -1,8 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Trash2, Loader2, Plus, X, Sparkles, Search } from "lucide-react"
+import {
+  Trash2,
+  Loader2,
+  Plus,
+  X,
+  Sparkles,
+  Search,
+  GitBranch,
+  Mail,
+  MailOpen,
+  MousePointerClick,
+  AlertTriangle,
+  Clock,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -77,6 +90,54 @@ export default function LeadDetailClient({ workspaceId, lead, canEdit }: Props) 
   // Delete dialog
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Enroll in sequence
+  const [enrollOpen, setEnrollOpen] = useState(false)
+  const [enrollSequenceId, setEnrollSequenceId] = useState("")
+  const [enrolling, setEnrolling] = useState(false)
+
+  // Sequences for enroll dialog
+  const [sequences, setSequences] = useState<{ id: string; name: string }[] | null>(null)
+
+  // Email activity
+  const [emailActivity, setEmailActivity] = useState<{
+    id: string
+    event_type: string
+    subject: string | null
+    created_at: string
+  }[] | null>(null)
+  const [activityLoading, setActivityLoading] = useState(true)
+
+  // Load email activity once on mount
+  useEffect(() => {
+    let cancelled = false
+    setActivityLoading(true)
+    trpc.lead.getEmailActivity.query({ workspaceId, leadId: lead.id })
+      .then((result) => {
+        if (!cancelled) setEmailActivity(result)
+      })
+      .catch(() => {
+        if (!cancelled) setEmailActivity([])
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [workspaceId, lead.id])
+
+  // Load sequences when enroll dialog opens
+  useEffect(() => {
+    if (!enrollOpen || sequences !== null) return
+    let cancelled = false
+    trpc.sequence.list.query({ workspaceId })
+      .then((result) => {
+        if (!cancelled) setSequences(result.sequences as { id: string; name: string }[])
+      })
+      .catch(() => {
+        if (!cancelled) setSequences([])
+      })
+    return () => { cancelled = true }
+  }, [enrollOpen, workspaceId, sequences])
 
   // ============================================================
   // Handlers
@@ -194,6 +255,32 @@ export default function LeadDetailClient({ workspaceId, lead, canEdit }: Props) 
     }
   }
 
+  const handleEnrollInSequence = async () => {
+    if (!enrollSequenceId) {
+      toast.error("กรุณาเลือก sequence")
+      return
+    }
+    setEnrolling(true)
+    try {
+      await trpc.sequence.enrollLeads.mutate({
+        workspaceId,
+        sequenceId: enrollSequenceId,
+        leadIds: [lead.id],
+      })
+      toast.success(`เพิ่ม "${lead.name}" เข้า sequence แล้ว`)
+      setEnrollOpen(false)
+      setEnrollSequenceId("")
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "ไม่สามารถเพิ่มเข้า sequence ได้"
+      toast.error(msg)
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
   const handleDelete = async () => {
     setDeleting(true)
     try {
@@ -285,6 +372,19 @@ export default function LeadDetailClient({ workspaceId, lead, canEdit }: Props) 
                 {findingEmail ? "กำลังค้นหา..." : "หาอีเมลจากเว็บ"}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start text-xs"
+              onClick={() => {
+                setEnrollSequenceId("")
+                setEnrollOpen(true)
+              }}
+              style={{ borderRadius: "var(--radius-btn)" }}
+            >
+              <GitBranch className="mr-2 h-3.5 w-3.5" style={{ color: "var(--color-info)" }} />
+              Enroll in Sequence
+            </Button>
           </div>
         </div>
       )}
@@ -388,6 +488,116 @@ export default function LeadDetailClient({ workspaceId, lead, canEdit }: Props) 
         </div>
       )}
 
+      {/* Email Activity Card */}
+      <div
+        className="rounded-xl border bg-white p-5"
+        style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
+      >
+        <h2 className="mb-3 text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+          Email Activity
+        </h2>
+
+        {activityLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded-lg bg-gray-100 shrink-0" />
+                <div className="flex-1">
+                  <div className="h-3 w-3/4 rounded bg-gray-200 mb-1" />
+                  <div className="h-2.5 w-20 rounded bg-gray-100" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !emailActivity || (emailActivity as unknown[]).length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-4">
+            <Mail className="h-6 w-6" style={{ color: "var(--color-border)" }} />
+            <p className="text-xs text-center" style={{ color: "var(--color-muted)" }}>
+              ยังไม่มีกิจกรรมอีเมล
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {(emailActivity as {
+              id: string
+              event_type: string
+              subject: string | null
+              created_at: string
+            }[]).map((event) => {
+              let Icon = Mail
+              let iconColor = "var(--color-muted)"
+              let iconBg = "var(--color-subtle)"
+              let label = event.event_type
+
+              switch (event.event_type) {
+                case "sent":
+                  Icon = Mail
+                  iconColor = "var(--color-primary)"
+                  iconBg = "var(--color-primary-light)"
+                  label = "ส่งอีเมล"
+                  break
+                case "opened":
+                  Icon = MailOpen
+                  iconColor = "var(--color-success)"
+                  iconBg = "#F0FDF4"
+                  label = "เปิดอ่านอีเมล"
+                  break
+                case "clicked":
+                  Icon = MousePointerClick
+                  iconColor = "var(--color-info)"
+                  iconBg = "#DBEAFE"
+                  label = "คลิกลิงก์"
+                  break
+                case "bounced":
+                  Icon = AlertTriangle
+                  iconColor = "var(--color-danger)"
+                  iconBg = "#FEF2F2"
+                  label = "อีเมล Bounce"
+                  break
+              }
+
+              const timeAgo = (() => {
+                const now = new Date()
+                const d = new Date(event.created_at)
+                const diffMin = Math.floor((now.getTime() - d.getTime()) / 60000)
+                if (diffMin < 1) return "เมื่อกี้"
+                if (diffMin < 60) return `${diffMin} นาทีที่แล้ว`
+                const diffHr = Math.floor(diffMin / 60)
+                if (diffHr < 24) return `${diffHr} ชั่วโมงที่แล้ว`
+                return `${Math.floor(diffHr / 24)} วันที่แล้ว`
+              })()
+
+              return (
+                <div key={event.id} className="flex items-start gap-2.5">
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: iconBg }}
+                  >
+                    <Icon className="h-3.5 w-3.5" style={{ color: iconColor }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+                      {label}
+                      {event.subject && (
+                        <span className="ml-1 font-normal" style={{ color: "var(--color-muted)" }}>
+                          — {event.subject}
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Clock className="h-3 w-3" style={{ color: "var(--color-muted)" }} />
+                      <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                        {timeAgo}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Delete */}
       {canEdit && (
         <Button
@@ -400,6 +610,62 @@ export default function LeadDetailClient({ workspaceId, lead, canEdit }: Props) 
           ลบ Lead นี้
         </Button>
       )}
+
+      {/* Enroll in Sequence Dialog */}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent style={{ borderRadius: "var(--radius-modal)" }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "var(--color-ink)" }}>Enroll in Sequence</DialogTitle>
+            <DialogDescription style={{ color: "var(--color-muted)" }}>
+              เพิ่ม &quot;{lead.name}&quot; เข้า email sequence
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+              เลือก Sequence
+            </label>
+            <Select value={enrollSequenceId} onValueChange={setEnrollSequenceId}>
+              <SelectTrigger style={{ borderRadius: "var(--radius-input)" }}>
+                <SelectValue placeholder="เลือก sequence..." />
+              </SelectTrigger>
+              <SelectContent>
+                {!sequences || sequences.length === 0 ? (
+                  <div className="px-3 py-2 text-xs" style={{ color: "var(--color-muted)" }}>
+                    ยังไม่มี sequence — สร้างใน Sequences ก่อน
+                  </div>
+                ) : (
+                  (sequences as { id: string; name: string }[]).map((seq) => (
+                    <SelectItem key={seq.id} value={seq.id}>
+                      {seq.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEnrollOpen(false)}
+              disabled={enrolling}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleEnrollInSequence}
+              disabled={enrolling || !enrollSequenceId}
+              style={{ backgroundColor: "var(--color-primary)", borderRadius: "var(--radius-btn)" }}
+            >
+              {enrolling ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GitBranch className="mr-2 h-4 w-4" />
+              )}
+              Enroll Lead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

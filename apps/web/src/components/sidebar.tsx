@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronDown,
   Building2,
+  BarChart3,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -57,6 +58,11 @@ function getNavItems(workspaceId: string): NavItem[] {
       href: `/${workspaceId}/sequences`,
       label: "Sequences",
       icon: GitBranch,
+    },
+    {
+      href: `/${workspaceId}/reports`,
+      label: "รายงาน",
+      icon: BarChart3,
     },
     {
       href: `/${workspaceId}/settings`,

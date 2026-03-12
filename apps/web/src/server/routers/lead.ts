@@ -534,6 +534,67 @@ export const leadRouter = router({
     }),
 
   // ----------------------------------------------------------
+  // getEmailActivity — ดึง email events ที่เกี่ยวกับ lead นี้
+  // ----------------------------------------------------------
+  getEmailActivity: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        leadId: z.string().uuid(),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const supabase = await createClient()
+      await verifyWorkspaceMember(supabase, ctx.user.id, input.workspaceId)
+
+      // ตรวจสอบว่า lead อยู่ใน workspace นี้
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('id', input.leadId)
+        .eq('workspace_id', input.workspaceId)
+        .maybeSingle()
+
+      if (!lead) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ lead นี้' })
+      }
+
+      const { data, error } = await supabase
+        .from('email_events')
+        .select(
+          `
+          id, event_type, occurred_at,
+          campaign_emails ( id, subject )
+        `,
+        )
+        .eq('lead_id', input.leadId)
+        .eq('workspace_id', input.workspaceId)
+        .order('occurred_at', { ascending: false })
+        .limit(input.limit)
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'ไม่สามารถดึง email activity ได้',
+          cause: error,
+        })
+      }
+
+      return (data ?? []).map((row) => {
+        const email = Array.isArray(row.campaign_emails)
+          ? row.campaign_emails[0]
+          : (row.campaign_emails as { id: string; subject: string | null } | null)
+        return {
+          id: row.id,
+          event_type: row.event_type,
+          subject: email?.subject ?? null,
+          created_at: row.occurred_at,
+        }
+      })
+    }),
+
+  // ----------------------------------------------------------
   // exportCsv — ส่ง CSV data ของ leads ใน workspace
   // ----------------------------------------------------------
   exportCsv: protectedProcedure

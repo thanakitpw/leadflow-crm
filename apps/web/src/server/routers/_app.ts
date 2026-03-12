@@ -8,6 +8,9 @@ import { campaignRouter } from '@/server/routers/campaign'
 import { templateRouter } from '@/server/routers/template'
 import { sequenceRouter } from '@/server/routers/sequence'
 import { domainRouter } from '@/server/routers/domain'
+import { dashboardRouter } from '@/server/routers/dashboard'
+import { reportRouter } from '@/server/routers/report'
+import { activityRouter } from '@/server/routers/activity'
 
 export const appRouter = router({
   // Health check (public)
@@ -25,6 +28,10 @@ export const appRouter = router({
   template: templateRouter,
   sequence: sequenceRouter,
   domain: domainRouter,
+  // Phase 4: Dashboard + Reports + Activity
+  dashboard: dashboardRouter,
+  report: reportRouter,
+  activity: activityRouter,
 })
 
 export type AppRouter = typeof appRouter

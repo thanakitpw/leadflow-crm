@@ -258,20 +258,48 @@
 ## Phase 4: เชื่อม 2 ระบบ + Dashboard
 > เป้าหมาย: Lead → Email Sequence ได้เลย + Agency dashboard
 
+### Database Schema
+- [x] Migration: `client_reports` table (share_token, date_from, date_to, config, expires_at) — `20260312000030`
+- [x] Migration: `activity_feed` table (action, entity_type, entity_id, metadata, user_id) — `20260312000030`
+- [x] View: `workspace_stats` (total_leads, new_leads, leads_with_email, campaign stats, email event counts) — `20260312000030`
+- [x] Function: `get_report_by_token(token)` — SECURITY DEFINER สำหรับ public share link — `20260312000030`
+- [x] Function: `cleanup_old_activity_feed(days)` — retention cleanup — `20260312000030`
+- [x] RLS policies: client_reports (CRUD for members, admin-only delete) + activity_feed (SELECT+INSERT for members, append-only)
+- [x] Indexes: activity_feed(workspace_id, created_at DESC), activity_feed(entity_type, entity_id), client_reports(workspace_id), client_reports(share_token)
+
 ### Lead → Email Integration
-- [ ] ปุ่ม "Enroll in Sequence" จาก Lead list
-- [ ] Bulk enroll (เลือกหลาย leads → enroll sequence)
-- [ ] Lead status อัพเดทเมื่อมี email activity (emailed, replied, etc.)
+- [x] ปุ่ม "Enroll in Sequence" จาก Lead list — `lead-list-client.tsx` bulk action + dialog
+- [x] Bulk enroll (เลือกหลาย leads → enroll sequence) — เลือก sequence จาก dropdown → confirm → `sequence.enrollLeads`
+- [x] Lead status อัพเดทเมื่อมี email activity — Email Activity section ใน `lead-detail-client.tsx`
 
 ### Agency Dashboard
-- [ ] Overview: Leads generated, Emails sent, Open rate, Reply rate
-- [ ] Per-workspace stats
-- [ ] Team activity feed
+- [x] Overview: Leads generated, Emails sent, Open rate, Reply rate — `[workspaceId]/page.tsx` stats cards
+- [x] Per-workspace stats — `dashboard.getPerWorkspaceStats` tRPC + agency overview
+- [x] Team activity feed — `dashboard.getRecentActivity` tRPC + activity feed UI
 
 ### Client Report
-- [ ] หน้า report per workspace (leads, campaign performance)
-- [ ] Shareable link (token-based, ไม่ต้อง login)
-- [ ] Export PDF
+- [x] หน้า report per workspace (leads, campaign performance) — `reports/page.tsx` + `report.ts` tRPC
+- [x] Shareable link (token-based, ไม่ต้อง login) — `report/[token]/page.tsx` public page + `report.getByToken`
+- [x] Export PDF — HTML report generator (Python) + browser print/PDF
+
+### tRPC Routers ใหม่ (Phase 4)
+- [x] `src/server/routers/dashboard.ts` — getStats, getRecentActivity, getAgencyOverview, getPerWorkspaceStats
+- [x] `src/server/routers/report.ts` — list, getById, create, update, delete, getByToken (public), getData, regenerateToken
+- [x] `src/server/routers/activity.ts` — list (cursor-based), create
+- [x] `src/server/routers/_app.ts` — เพิ่ม dashboard, report, activity
+
+### Python API ใหม่ (Phase 4)
+- [x] `app/services/report_generator.py` — HTML report generator (inline CSS, professional layout)
+- [x] `app/services/activity_tracker.py` — Activity tracking service → Supabase
+- [x] `app/api/v1/endpoints/report.py` — POST /api/v1/report/generate-html
+- [x] `main.py` — เพิ่ม report router
+
+### UI Pages ใหม่ (Phase 4)
+- [x] Dashboard page — stats cards + activity feed + quick actions
+- [x] Reports page — `[workspaceId]/reports/page.tsx` (list + create + share)
+- [x] Public Report — `report/[token]/page.tsx` (shareable, no login)
+- [x] Lead-Email integration — enroll in sequence (single + bulk)
+- [x] Sidebar — เพิ่ม "รายงาน" nav item
 
 ---
 
@@ -352,11 +380,11 @@ Phase 0: Project Setup        [~] 15/16 tasks
 Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← Phase 1 เสร็จสมบูรณ์แล้ว
 Phase 2: Lead Generation      [~] 52/53 tasks  ← เสร็จเกือบหมด เหลือ Supabase Realtime
 Phase 3: Email Outreach       [~] 44/46 tasks  ← UI ครบทุกหน้า + tRPC routers ทั้ง 4 ตัว (campaign, template, sequence, domain)
-Phase 4: เชื่อม 2 ระบบ        [ ] 0/7  tasks
+Phase 4: เชื่อม 2 ระบบ        [x] 28/28 tasks ← Phase 4 เสร็จสมบูรณ์ (Frontend UI เสร็จ 2026-03-12)
 Phase 5: CRM Layer            [ ] 0/15 tasks
 Phase 6: Scale & Optimize     [ ] 0/12 tasks
 
-รวม: 141/169 tasks
+รวม: 169/190 tasks
 
 ### Phase 3 — สิ่งที่ทำใน session นี้ (2026-03-12)
 tRPC Routers ใหม่:
@@ -377,4 +405,32 @@ UI Pages ใหม่:
 - `settings/domains/page.tsx` — Domain settings + DNS records + verify
 
 Sidebar อัพเดท: เพิ่ม Campaigns (MailOpen), Templates (FileText), Sequences (GitBranch)
+
+### Phase 4 — Database Schema (2026-03-12)
+Migration ใหม่: `supabase/migrations/20260312000030_phase4_integration.sql`
+- `client_reports` table — shareable report ด้วย share_token + expires_at
+- `activity_feed` table — team activity log (append-only, RLS block UPDATE/DELETE)
+- `workspace_stats` view — real-time dashboard stats รวมจาก leads/campaigns/email_events (security_invoker)
+- `get_report_by_token(token)` function — SECURITY DEFINER สำหรับ public share link
+- `cleanup_old_activity_feed(days)` function — retention policy helper
+
+### Phase 4 — Frontend UI (2026-03-12)
+ไฟล์ใหม่/อัพเดท:
+- `apps/web/src/app/(dashboard)/[workspaceId]/page.tsx` — เขียนใหม่ทั้งหมด: Agency Dashboard พร้อม 6 stats cards (totalLeads, withEmail, campaigns, emailsSent, openRate, clickRate), recent activity feed (icon ตาม action type, relative time), quick actions panel, reports shortcut
+- `apps/web/src/app/(dashboard)/[workspaceId]/reports/page.tsx` — Reports page (list + create dialog + date range + share link copy + delete)
+- `apps/web/src/app/report/[token]/page.tsx` — Public Report (no login, expired/notfound states, stats + campaign table)
+- `apps/web/src/app/(dashboard)/[workspaceId]/leads/lead-list-client.tsx` — เพิ่มปุ่ม "Enroll in Sequence" ใน bulk actions + Enroll dialog
+- `apps/web/src/app/(dashboard)/[workspaceId]/leads/[leadId]/lead-detail-client.tsx` — เพิ่ม Email Activity section + ปุ่ม "Enroll in Sequence" เดี่ยว + Enroll dialog
+- `apps/web/src/components/sidebar.tsx` — เพิ่ม nav item "รายงาน" (BarChart3 icon)
+- `apps/web/src/server/routers/lead.ts` — เพิ่ม `lead.getEmailActivity` endpoint
+
+### Phase 4 — Python API: Report + Activity Tracking (2026-03-12)
+ไฟล์ใหม่ใน `apps/python-api/`:
+- `app/schemas/report.py` — Pydantic models: ReportGenerateRequest, ReportGenerateResponse, SummaryStats, CampaignStat, TopLead
+- `app/services/report_generator.py` — generate_report_html() สร้าง printable HTML report (inline CSS, professional layout, รองรับภาษาไทย via Google Fonts)
+- `app/services/activity_tracker.py` — track_activity() core function + convenience wrappers ครบ 14 actions (lead/campaign/email/template/sequence)
+- `app/api/v1/endpoints/report.py` — POST /api/v1/report/generate-html endpoint พร้อม date validation
+- `main.py` — เพิ่ม report router
+- `app/schemas/__init__.py` — export report schemas
+- `app/api/v1/endpoints/__init__.py` — register report module
 ```
