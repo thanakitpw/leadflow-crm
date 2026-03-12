@@ -1,0 +1,16 @@
+{
+  "name": "@leadflow/trigger",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx trigger.dev@latest dev",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'no lint configured'"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "^3.3.14"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

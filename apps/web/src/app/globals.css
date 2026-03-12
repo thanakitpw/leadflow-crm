@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* ============ LeadFlow Design System ============ */
+
+:root {
+  /* Brand */
+  --color-primary: #1E3A5F;
+  --color-primary-dark: #152C4A;
+  --color-primary-light: #EEF2F8;
+
+  /* Text */
+  --color-ink: #1C1814;
+  --color-muted: #7A6F68;
+
+  /* Surface */
+  --color-white: #FFFFFF;
+  --color-canvas: #F7F5F2;
+  --color-subtle: #EFE9E2;
+  --color-border: #E5DDD6;
+
+  /* Semantic */
+  --color-success: #16A34A;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-info: #2563EB;
+  --color-ai: #7C3AED;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-badge: 6px;
+  --radius-input: 8px;
+  --radius-btn: 10px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+}
+
+@theme inline {
+  /* Colors */
+  --color-primary: var(--color-primary);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-light: var(--color-primary-light);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --color-canvas: var(--color-canvas);
+  --color-subtle: var(--color-subtle);
+  --color-border: var(--color-border);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-info: var(--color-info);
+  --color-ai: var(--color-ai);
+
+  /* Radius */
+  --radius-sm: var(--radius-sm);
+  --radius-badge: var(--radius-badge);
+  --radius-input: var(--radius-input);
+  --radius-btn: var(--radius-btn);
+  --radius-card: var(--radius-card);
+  --radius-modal: var(--radius-modal);
+
+  /* Font */
+  --font-sans: "Noto Sans Thai", "Inter", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
