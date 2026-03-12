@@ -50,6 +50,48 @@ export function createTestCaller(context?: TRPCContext) {
 }
 
 /**
+ * สร้าง mock Supabase query chain ที่สนับสนุน fluent API
+ * รองรับ chaining method calls และ terminal methods (single, maybeSingle, then)
+ */
+export function createMockQueryChain(
+  resolveData: any = null,
+  resolveError: any = null,
+  resolveCount: number | null = null,
+) {
+  const chain: any = {}
+
+  // Chainable methods — return chain itself for fluent API
+  const chainMethods = ['select', 'insert', 'update', 'delete', 'upsert', 'eq', 'neq', 'in', 'is', 'not', 'gte', 'lte', 'gt', 'lt', 'like', 'ilike', 'or', 'order', 'limit', 'range', 'textSearch']
+  chainMethods.forEach(m => { chain[m] = vi.fn().mockReturnValue(chain) })
+
+  // Terminal methods — resolve with data/error
+  chain.single = vi.fn().mockResolvedValue({ data: resolveData, error: resolveError, status: 200, statusText: 'OK' })
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data: resolveData, error: resolveError, status: 200, statusText: 'OK' })
+
+  // Support both await and .then() patterns
+  chain.then = vi.fn((resolve: any) =>
+    resolve({ data: resolveData, error: resolveError, count: resolveCount, status: 200, statusText: 'OK' }),
+  )
+
+  return chain
+}
+
+/**
+ * สร้าง mock supabase.from() ที่ return query chain ตามชื่อ table
+ * @param tableConfig - object ที่ map table name → {data?, error?, single?, count?}
+ */
+export function createMockSupabaseFrom(tableConfig: Record<string, { data?: any; error?: any; single?: any; count?: number }>) {
+  return vi.fn().mockImplementation((table: string) => {
+    const config = tableConfig[table] || {}
+    const isSingleQuery = config.single !== undefined
+    const data = isSingleQuery ? config.single : config.data ?? null
+    const count = config.count ?? (Array.isArray(config.data) ? config.data.length : null)
+
+    return createMockQueryChain(data, config.error || null, count)
+  })
+}
+
+/**
  * Helper สำหรับสร้าง mock Supabase response
  * ใช้ร่วมกับ vi.mock('@/lib/supabase/server')
  */
@@ -133,4 +175,12 @@ export function createContextWithWorkspaceMember(workspaceMembership?: {
     role,
     context: createMockContext(),
   }
+}
+
+/**
+ * Generate a valid UUID for testing
+ */
+export function generateUUID(seed: string | number = 0): string {
+  const s = String(seed).padStart(12, '0')
+  return `00000000-0000-0000-0000-${s.substring(0, 12)}`
 }

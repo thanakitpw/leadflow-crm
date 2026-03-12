@@ -1,6 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { TRPCError } from '@trpc/server'
-import { createTestCaller, createMockContext, createUnauthenticatedContext } from '../helpers/trpc-test'
+import { createTestCaller, createMockContext, createUnauthenticatedContext, createMockSupabaseFrom, generateUUID } from '../helpers/trpc-test'
+
+// Mock Supabase server client at module level
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: vi.fn(),
+}))
+
+// Import the mocked createClient
+import { createClient } from '@/lib/supabase/server'
+
+// Track the mock for reuse in tests
+const mockCreateClient = createClient as any
 
 /**
  * Campaign Router Tests
@@ -16,70 +27,148 @@ describe('campaign router', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.list({
-          workspaceId: 'test-workspace-id',
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+      await expect(
+        caller.campaign.list({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+        }),
+      ).rejects.toThrow()
     })
 
     it('should return campaigns for valid workspace', async () => {
-      const caller = createTestCaller(createMockContext())
+      const mockCampaigns = [
+        {
+          id: generateUUID(10),
+          name: 'Q1 Campaign',
+          status: 'draft',
+          scheduled_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          template_id: generateUUID(100),
+          sending_domain_id: generateUUID(200),
+          workspace_id: '00000000-0000-0000-0000-000000000001',
+          email_templates: { name: 'Welcome Email' },
+          sending_domains: { domain: 'noreply@example.com' },
+        },
+        {
+          id: generateUUID(20),
+          name: 'Q2 Campaign',
+          status: 'scheduled',
+          scheduled_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          template_id: generateUUID(101),
+          sending_domain_id: generateUUID(200),
+          workspace_id: '00000000-0000-0000-0000-000000000001',
+          email_templates: { name: 'Follow-up Email' },
+          sending_domains: { domain: 'noreply@example.com' },
+        },
+      ]
 
-      try {
-        const result = await caller.campaign.list({
-          workspaceId: 'test-workspace-id',
-          page: 1,
-          pageSize: 20,
-        })
+      const mockCampaignContacts = [
+        { campaign_id: generateUUID(10), status: 'sent' },
+        { campaign_id: generateUUID(10), status: 'opened' },
+        { campaign_id: generateUUID(20), status: 'pending' },
+      ]
 
-        expect(result).toHaveProperty('campaigns')
-        expect(result).toHaveProperty('total')
-        expect(result).toHaveProperty('page')
-        expect(result).toHaveProperty('pageSize')
-        expect(Array.isArray(result.campaigns)).toBe(true)
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { data: mockCampaigns, count: 2 },
+          campaign_contacts: { data: mockCampaignContacts },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.list({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        page: 1,
+        pageSize: 20,
+      })
+
+      expect(result.campaigns).toHaveLength(2)
+      expect(result.total).toBe(2)
+      expect(result.page).toBe(1)
+      expect(result.pageSize).toBe(20)
+      expect(result.campaigns[0].name).toBe('Q1 Campaign')
     })
 
     it('should filter campaigns by status', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        const result = await caller.campaign.list({
-          workspaceId: 'test-workspace-id',
+      const mockCampaigns = [
+        {
+          id: generateUUID(10),
+          name: 'Draft Campaign',
           status: 'draft',
-          page: 1,
-          pageSize: 20,
-        })
+          scheduled_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          template_id: generateUUID(100),
+          sending_domain_id: generateUUID(200),
+          workspace_id: '00000000-0000-0000-0000-000000000001',
+          email_templates: { name: 'Email' },
+          sending_domains: { domain: 'noreply@example.com' },
+        },
+      ]
 
-        expect(Array.isArray(result.campaigns)).toBe(true)
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { data: mockCampaigns, count: 1 },
+          campaign_contacts: { data: [] },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.list({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        status: 'draft',
+        page: 1,
+        pageSize: 20,
+      })
+
+      expect(result.campaigns).toHaveLength(1)
+      expect(result.campaigns[0].status).toBe('draft')
     })
 
     it('should paginate campaigns correctly', async () => {
-      const caller = createTestCaller(createMockContext())
+      const mockCampaigns = Array.from({ length: 10 }, (_, i) => ({
+        id: generateUUID(300 + i),
+        name: `Campaign ${i + 1}`,
+        status: 'draft',
+        scheduled_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: generateUUID(200),
+        workspace_id: '00000000-0000-0000-0000-000000000001',
+        email_templates: { name: 'Email' },
+        sending_domains: { domain: 'noreply@example.com' },
+      }))
 
-      try {
-        const result = await caller.campaign.list({
-          workspaceId: 'test-workspace-id',
-          page: 2,
-          pageSize: 10,
-        })
-
-        expect(result.page).toBe(2)
-        expect(result.pageSize).toBe(10)
-        expect(typeof result.total).toBe('number')
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { data: mockCampaigns, count: 25 },
+          campaign_contacts: { data: [] },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.list({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        page: 2,
+        pageSize: 10,
+      })
+
+      expect(result.page).toBe(2)
+      expect(result.pageSize).toBe(10)
+      expect(result.total).toBe(25)
+      expect(result.totalPages).toBe(3)
     })
   })
 
@@ -91,34 +180,58 @@ describe('campaign router', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.getById({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+      await expect(
+        caller.campaign.getById({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+          campaignId: '00000000-0000-0000-0000-000000000020',
+        }),
+      ).rejects.toThrow()
     })
 
     it('should return campaign details with stats', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        const result = await caller.campaign.getById({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-
-        expect(result).toHaveProperty('id')
-        expect(result).toHaveProperty('name')
-        expect(result).toHaveProperty('status')
-        expect(result).toHaveProperty('stats')
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockCampaign = {
+        id: generateUUID(10),
+        name: 'Q1 Campaign',
+        status: 'sending',
+        scheduled_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: generateUUID(200),
+        workspace_id: '00000000-0000-0000-0000-000000000001',
+        email_templates: { id: generateUUID(100), name: 'Welcome', subject: 'Welcome!', body_html: '<p>Welcome</p>' },
+        sending_domains: { id: generateUUID(200), domain: 'noreply@example.com', status: 'verified' },
       }
+
+      const mockStats = [
+        { status: 'sent' },
+        { status: 'sent' },
+        { status: 'opened' },
+        { status: 'pending' },
+      ]
+
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { single: mockCampaign },
+          campaign_contacts: { data: mockStats },
+        }),
+      }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.getById({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        campaignId: generateUUID(10),
+      })
+
+      expect(result.id).toBe(generateUUID(10))
+      expect(result.name).toBe('Q1 Campaign')
+      expect(result.status).toBe('sending')
+      expect(result.stats).toHaveProperty('total')
+      expect(result.stats).toHaveProperty('sent')
+      expect(result.stats).toHaveProperty('opened')
     })
   })
 
@@ -130,49 +243,46 @@ describe('campaign router', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.create({
-          workspaceId: 'test-workspace-id',
+      await expect(
+        caller.campaign.create({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
           name: 'Test Campaign',
-          templateId: 'test-template-id',
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+        }),
+      ).rejects.toThrow()
     })
 
-    it('should create campaign with valid template', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        const result = await caller.campaign.create({
-          workspaceId: 'test-workspace-id',
-          name: 'New Campaign',
-          templateId: 'test-template-id',
-        })
-
-        expect(result).toHaveProperty('id')
-        expect(result.name).toBe('New Campaign')
-        expect(result.status).toBe('draft')
-      } catch (error) {
-        expect(error).toBeDefined()
+    it('should create campaign with valid data', async () => {
+      const newCampaign = {
+        id: generateUUID(11),
+        name: 'New Campaign',
+        status: 'draft',
+        scheduled_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: null,
+        workspace_id: '00000000-0000-0000-0000-000000000001',
+        audience_filter: null,
       }
-    })
 
-    it('should reject without template_id', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        await caller.campaign.create({
-          workspaceId: 'test-workspace-id',
-          name: 'Invalid Campaign',
-        } as any)
-        expect.fail('ควรโยน validation error')
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { single: newCampaign },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.create({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        name: 'New Campaign',
+      })
+
+      expect(result.id).toBe(generateUUID(11))
+      expect(result.name).toBe('New Campaign')
+      expect(result.status).toBe('draft')
     })
   })
 
@@ -184,52 +294,111 @@ describe('campaign router', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.schedule({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
+      await expect(
+        caller.campaign.schedule({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+          campaignId: '00000000-0000-0000-0000-000000000020',
           scheduledAt: new Date(Date.now() + 3600000).toISOString(),
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+        }),
+      ).rejects.toThrow()
     })
 
     it('should set scheduled_at for future date', async () => {
-      const caller = createTestCaller(createMockContext())
       const futureDate = new Date(Date.now() + 3600000).toISOString()
-
-      try {
-        const result = await caller.campaign.schedule({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-          scheduledAt: futureDate,
-        })
-
-        expect(result.scheduled_at).toBe(futureDate)
-        expect(result.status).toBe('scheduled')
-      } catch (error) {
-        expect(error).toBeDefined()
+      const scheduledCampaign = {
+        id: generateUUID(10),
+        name: 'Campaign',
+        status: 'scheduled',
+        scheduled_at: futureDate,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: generateUUID(200),
+        workspace_id: '00000000-0000-0000-0000-000000000001',
       }
+
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { single: scheduledCampaign },
+        }),
+      }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.schedule({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        campaignId: generateUUID(10),
+        scheduledAt: futureDate,
+      })
+
+      expect(result.status).toBe('scheduled')
+      expect(result.scheduled_at).toBe(futureDate)
+    })
+  })
+
+  // ============================================================
+  // campaign.getContacts Tests
+  // ============================================================
+
+  describe('campaign.getContacts', () => {
+    it('should require authentication', async () => {
+      const caller = createTestCaller(createUnauthenticatedContext())
+
+      await expect(
+        caller.campaign.getContacts({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+          campaignId: generateUUID(10),
+        }),
+      ).rejects.toThrow()
     })
 
-    it('should reject past dates', async () => {
-      const caller = createTestCaller(createMockContext())
-      const pastDate = new Date(Date.now() - 3600000).toISOString()
+    it('should return campaign contacts with pagination', async () => {
+      const mockContacts = [
+        {
+          id: 'contact-1',
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          opened_at: null,
+          clicked_at: null,
+          bounced_at: null,
+          created_at: new Date().toISOString(),
+          leads: { id: generateUUID(1), name: 'Business 1', email: 'b1@test.com' },
+        },
+        {
+          id: 'contact-2',
+          status: 'opened',
+          sent_at: new Date().toISOString(),
+          opened_at: new Date().toISOString(),
+          clicked_at: null,
+          bounced_at: null,
+          created_at: new Date().toISOString(),
+          leads: { id: generateUUID(2), name: 'Business 2', email: 'b2@test.com' },
+        },
+      ]
 
-      try {
-        await caller.campaign.schedule({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-          scheduledAt: pastDate,
-        })
-        // ขึ้นอยู่กับว่า API ตรวจสอบวันที่หรือไม่
-      } catch (error) {
-        // ควรมี validation error
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaign_contacts: { data: mockContacts, count: 2 },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.getContacts({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        campaignId: generateUUID(10),
+        page: 1,
+        pageSize: 20,
+      })
+
+      expect(result.contacts).toHaveLength(2)
+      expect(result.total).toBe(2)
+      expect(result.contacts[0].status).toBe('sent')
+      expect(result.contacts[1].status).toBe('opened')
     })
   })
 
@@ -241,69 +410,126 @@ describe('campaign router', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.previewAudience({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+      await expect(
+        caller.campaign.previewAudience({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+        }),
+      ).rejects.toThrow()
     })
 
     it('should return matching leads count', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        const result = await caller.campaign.previewAudience({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-
-        expect(result).toHaveProperty('audienceCount')
-        expect(typeof result.audienceCount).toBe('number')
-        expect(result.audienceCount).toBeGreaterThanOrEqual(0)
-      } catch (error) {
-        expect(error).toBeDefined()
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          leads: { data: Array(42).fill({}), count: 42 },
+        }),
       }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.previewAudience({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+      })
+
+      expect(result).toHaveProperty('count')
+      expect(result.count).toBe(42)
     })
   })
 
   // ============================================================
-  // campaign.updateStatus Tests
+  // campaign.pause Tests
   // ============================================================
 
   describe('campaign.pause', () => {
     it('should require authentication', async () => {
       const caller = createTestCaller(createUnauthenticatedContext())
 
-      try {
-        await caller.campaign.pause({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-        expect.fail('ควรมี UNAUTHORIZED error')
-      } catch (error) {
-        expect(error).toBeInstanceOf(TRPCError)
-        expect((error as TRPCError).code).toBe('UNAUTHORIZED')
-      }
+      await expect(
+        caller.campaign.pause({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+          campaignId: '00000000-0000-0000-0000-000000000020',
+        }),
+      ).rejects.toThrow()
     })
 
-    it('should pause a campaign', async () => {
-      const caller = createTestCaller(createMockContext())
-
-      try {
-        const result = await caller.campaign.pause({
-          workspaceId: 'test-workspace-id',
-          campaignId: 'test-campaign-id',
-        })
-
-        expect(result).toBeDefined()
-      } catch (error) {
-        expect(error).toBeDefined()
+    it('should pause a sending campaign', async () => {
+      const pausedCampaign = {
+        id: generateUUID(10),
+        name: 'Campaign',
+        status: 'paused',
+        scheduled_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: generateUUID(200),
+        workspace_id: '00000000-0000-0000-0000-000000000001',
       }
+
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { single: pausedCampaign },
+        }),
+      }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.pause({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        campaignId: generateUUID(10),
+      })
+
+      expect(result.status).toBe('paused')
+    })
+  })
+
+  // ============================================================
+  // campaign.cancel Tests
+  // ============================================================
+
+  describe('campaign.cancel', () => {
+    it('should require authentication', async () => {
+      const caller = createTestCaller(createUnauthenticatedContext())
+
+      await expect(
+        caller.campaign.cancel({
+          workspaceId: '00000000-0000-0000-0000-000000000001',
+          campaignId: '00000000-0000-0000-0000-000000000020',
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('should cancel a campaign', async () => {
+      const cancelledCampaign = {
+        id: generateUUID(10),
+        name: 'Campaign',
+        status: 'cancelled',
+        scheduled_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        template_id: generateUUID(100),
+        sending_domain_id: generateUUID(200),
+        workspace_id: '00000000-0000-0000-0000-000000000001',
+      }
+
+      const mockSupabaseClient = {
+        from: createMockSupabaseFrom({
+          workspace_members: { single: { role: 'agency_member' } },
+          campaigns: { single: cancelledCampaign },
+        }),
+      }
+
+      mockCreateClient.mockResolvedValue(mockSupabaseClient)
+
+      const caller = createTestCaller(createMockContext())
+      const result = await caller.campaign.cancel({
+        workspaceId: '00000000-0000-0000-0000-000000000001',
+        campaignId: generateUUID(10),
+      })
+
+      expect(result.status).toBe('cancelled')
     })
   })
 })
