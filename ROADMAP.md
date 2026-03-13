@@ -199,7 +199,7 @@
 - [x] Variable system: `{{first_name}}`, `{{business_name}}`, `{{location}}`, `{{category}}`, etc. — `src/lib/email/template-variables.ts`
 - [x] Template categories (Cold Outreach, Follow Up, Introduction, Promotion, Newsletter, Re-engagement) — template editor + list filter
 - [x] Duplicate template — `template.duplicate` tRPC procedure
-- [ ] Test send (ส่งให้ตัวเองดูก่อน) — ปุ่มพร้อม, backend ยังไม่เชื่อม
+- [x] Test send (ส่งให้ตัวเองดูก่อน) — `template.testSend` tRPC mutation + Python API (2026-03-14)
 
 ### Claude Email Writer Agent
 - [x] `POST /api/v1/email/generate` endpoint — `app/api/v1/endpoints/email.py`
@@ -216,16 +216,24 @@
 - [x] Daily sending limit per domain (warmup_current_limit) — `src/lib/email/send-campaign.ts` + `domain_manager.calculate_warmup_limit()`
 - [x] ส่งผ่าน Python API (`POST /api/v1/email/send`) — `app/services/email_sender.py` + `app/api/v1/endpoints/email.py`
 - [x] `POST /api/v1/email/send-batch` (max 100, asyncio.gather + Semaphore(10)) — `app/services/email_sender.py`
+- [x] Campaign Send Integration — เชื่อม `sendCampaign()` กับ campaign router (2026-03-14)
+  - [x] แก้ `callPythonEmailSend` ให้ embed `from_name` ใน `"Name <email>"` format (Python API ไม่มี `from_name` field)
+  - [x] แก้ status check ใน `sendCampaign` รองรับ `'sending'` (บน line 186)
+  - [x] `POST /api/internal/campaign-send` — internal route รับ `campaignId` แล้วเรียก `sendCampaign()`
+  - [x] `campaign.schedule` tRPC — trigger send ทันทีถ้าไม่มี `scheduledAt` (fire-and-forget)
+  - [x] `campaign.sendNow` tRPC — ส่งทันทีจากหน้า campaign detail (validate status + template)
+  - [x] `GET /api/cron/process-scheduled-campaigns` — cron route หา scheduled campaigns ที่ถึงเวลา → trigger send
 - [ ] Track sent status realtime
 
 ### Email Sequences (Drip)
 - [x] สร้าง sequence + กำหนด steps — `sequences/[sequenceId]/page.tsx` (visual timeline builder)
 - [x] Step config: template, delay (วัน) — `sequence.addStep` / `sequence.updateStep` tRPC
 - [x] Enroll leads เข้า sequence (manual) — `sequence.enrollLeads` tRPC
-- [ ] Trigger.dev job: `process-sequence-step` ทำงานทุกวัน
-  - [ ] หา enrollments ที่ถึงเวลาส่ง step ถัดไป
-  - [ ] เช็ค condition (open/reply)
-  - [ ] ส่งอีเมล → อัพเดท step
+- [x] Fix DB column name mismatch: `step_order` → `step_number` ใน `sequence.ts` router (getById select/order, addStep insert, updateStep input+update)
+- [x] Sequence processing engine — `src/lib/email/process-sequences.ts` (processSequences: load active enrollments, check delay, send via Python API, update current_step + last_step_at, record email_events, mark completed)
+- [x] Cron route — `src/app/api/cron/process-sequences/route.ts` (GET, Bearer auth via CRON_SECRET)
+- [ ] Trigger.dev job: `process-sequence-step` เรียก processSequences ทุก 30 นาที
+  - [ ] เช็ค condition (open/reply) ก่อนส่ง step ถัดไป
   - [ ] Auto-stop เมื่อมี reply
 - [ ] Timezone-aware (ส่งตาม timezone ของ recipient)
 
@@ -379,7 +387,7 @@
 Phase 0: Project Setup        [~] 15/16 tasks
 Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← Phase 1 เสร็จสมบูรณ์แล้ว
 Phase 2: Lead Generation      [~] 52/53 tasks  ← เสร็จเกือบหมด เหลือ Supabase Realtime
-Phase 3: Email Outreach       [~] 44/46 tasks  ← UI ครบทุกหน้า + tRPC routers ทั้ง 4 ตัว (campaign, template, sequence, domain)
+Phase 3: Email Outreach       [~] 48/49 tasks  ← Email Integration เสร็จ: campaign send, template test send, sequence processing (2026-03-14)
 Phase 4: เชื่อม 2 ระบบ        [x] 28/28 tasks ← Phase 4 เสร็จสมบูรณ์ (Frontend UI เสร็จ 2026-03-12)
 Phase 5: CRM Layer            [ ] 0/15 tasks
 Phase 6: Scale & Optimize     [ ] 0/12 tasks

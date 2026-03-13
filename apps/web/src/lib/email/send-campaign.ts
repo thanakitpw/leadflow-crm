@@ -127,10 +127,21 @@ interface PythonSendResponse {
 }
 
 async function callPythonEmailSend(payload: PythonSendPayload): Promise<string> {
+  // Python API รับ from_email เดียว — ฝัง from_name ลงใน "Name <email>" format
+  const fromEmailWithName = payload.from_name
+    ? `${payload.from_name} <${payload.from_email}>`
+    : payload.from_email
+
   const res = await fetch(`${PYTHON_API_URL}/api/v1/email/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      from_email: fromEmailWithName,
+      to_email:   payload.to_email,
+      subject:    payload.subject,
+      html_body:  payload.body_html,
+      body_text:  payload.body_text,
+    }),
   })
 
   if (!res.ok) {
@@ -183,7 +194,7 @@ export async function sendCampaign(campaignId: string): Promise<SendCampaignResu
 
   const typedCampaign = campaign as Campaign
 
-  if (!['draft', 'scheduled'].includes(typedCampaign.status)) {
+  if (!['draft', 'scheduled', 'sending'].includes(typedCampaign.status)) {
     throw new Error(`Campaign status is "${typedCampaign.status}" — cannot send`)
   }
 

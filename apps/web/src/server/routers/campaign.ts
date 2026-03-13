@@ -4,6 +4,25 @@ import { router, protectedProcedure } from '@/server/trpc'
 import { createClient } from '@/lib/supabase/server'
 
 // ============================================================
+// Internal send helpers
+// ============================================================
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? 'dev-internal-secret'
+
+/**
+ * Trigger campaign send แบบ fire-and-forget
+ * เรียก internal API route เพื่อไม่บล็อก tRPC response
+ */
+function triggerCampaignSend(campaignId: string): void {
+  void fetch(`${APP_URL}/api/internal/campaign-send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campaignId, secret: INTERNAL_SECRET }),
+  }).catch((err) => console.error('[campaign.schedule] Failed to trigger send:', err))
+}
+
+// ============================================================
 // Schemas
 // ============================================================
 
@@ -413,7 +432,64 @@ export const campaignRouter = router({
         })
       }
 
+      // ส่งทันทีถ้าไม่ได้ตั้งเวลา (fire and forget)
+      if (!input.scheduledAt) {
+        triggerCampaignSend(input.campaignId)
+      }
+
       return data
+    }),
+
+  // ----------------------------------------------------------
+  // sendNow — ส่ง campaign ทันทีจากหน้า campaign detail
+  // ----------------------------------------------------------
+  sendNow: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        campaignId:  z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const supabase = await createClient()
+      await verifyWorkspaceMember(supabase, ctx.user.id, input.workspaceId)
+
+      // ตรวจสอบ campaign และ status ก่อนส่ง
+      const { data: campaign } = await supabase
+        .from('campaigns')
+        .select('id, status, template_id')
+        .eq('id', input.campaignId)
+        .eq('workspace_id', input.workspaceId)
+        .maybeSingle()
+
+      if (!campaign) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ campaign นี้' })
+      }
+
+      if (!['draft', 'scheduled', 'paused'].includes(campaign.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `ไม่สามารถส่ง campaign ที่มีสถานะ "${campaign.status}" ได้`,
+        })
+      }
+
+      if (!campaign.template_id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'กรุณาเลือก template ก่อนส่ง campaign',
+        })
+      }
+
+      // อัพเดทสถานะ → sending
+      await supabase
+        .from('campaigns')
+        .update({ status: 'sending', updated_at: new Date().toISOString() })
+        .eq('id', input.campaignId)
+
+      // Trigger send แบบ fire and forget
+      triggerCampaignSend(input.campaignId)
+
+      return { triggered: true, campaignId: input.campaignId }
     }),
 
   // ----------------------------------------------------------

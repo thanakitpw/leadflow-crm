@@ -138,13 +138,13 @@ export const sequenceRouter = router({
         .from('sequence_steps')
         .select(
           `
-          id, step_order, delay_days, condition, created_at,
+          id, step_number, delay_days, condition, created_at,
           template_id,
           email_templates ( id, name, subject )
         `,
         )
         .eq('sequence_id', input.sequenceId)
-        .order('step_order', { ascending: true })
+        .order('step_number', { ascending: true })
 
       // ดึง enrollments count
       const { count: activeEnrollments } = await supabase
@@ -294,7 +294,7 @@ export const sequenceRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ sequence นี้' })
       }
 
-      // หา step_order ถัดไป
+      // หา step_number ถัดไป
       const { count } = await supabase
         .from('sequence_steps')
         .select('id', { count: 'exact', head: true })
@@ -309,7 +309,7 @@ export const sequenceRouter = router({
           template_id: input.templateId,
           delay_days: input.delayDays,
           condition: input.condition ?? null,
-          step_order: nextOrder,
+          step_number: nextOrder,
         })
         .select('*, email_templates ( id, name, subject )')
         .single()
@@ -337,7 +337,7 @@ export const sequenceRouter = router({
         templateId: z.string().uuid().optional(),
         delayDays: z.number().int().min(0).optional(),
         condition: z.string().nullable().optional(),
-        stepOrder: z.number().int().min(1).optional(),
+        stepNumber: z.number().int().min(1).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -348,7 +348,7 @@ export const sequenceRouter = router({
       if (input.templateId !== undefined) updateData.template_id = input.templateId
       if (input.delayDays !== undefined) updateData.delay_days = input.delayDays
       if (input.condition !== undefined) updateData.condition = input.condition
-      if (input.stepOrder !== undefined) updateData.step_order = input.stepOrder
+      if (input.stepNumber !== undefined) updateData.step_number = input.stepNumber
 
       const { data, error } = await supabase
         .from('sequence_steps')

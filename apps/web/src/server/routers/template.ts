@@ -2,6 +2,10 @@ import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { router, protectedProcedure } from '@/server/trpc'
 import { createClient } from '@/lib/supabase/server'
+import { replaceVariables } from '@/lib/email/template-variables'
+
+const PYTHON_API_URL = process.env.PYTHON_API_URL ?? 'http://localhost:8000'
+const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL ?? process.env.EMAIL_FROM ?? 'noreply@leadflow.app'
 
 // ============================================================
 // Helpers
@@ -275,5 +279,92 @@ export const templateRouter = router({
       }
 
       return data
+    }),
+
+  // ----------------------------------------------------------
+  // testSend — ส่ง email ทดสอบด้วย sample data
+  // ----------------------------------------------------------
+  testSend: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        templateId: z.string().uuid(),
+        toEmail: z.string().email(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const supabase = await createClient()
+      await verifyWorkspaceMember(supabase, ctx.user.id, input.workspaceId)
+
+      // ดึง template จาก DB
+      const { data: template, error: fetchError } = await supabase
+        .from('email_templates')
+        .select('*')
+        .eq('id', input.templateId)
+        .eq('workspace_id', input.workspaceId)
+        .single()
+
+      if (fetchError || !template) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ template นี้' })
+      }
+
+      // Sample data สำหรับทดสอบ
+      const sampleData: Record<string, string> = {
+        business_name: 'ร้านตัวอย่าง',
+        first_name: 'ทดสอบ',
+        location: 'กรุงเทพมหานคร',
+        category: 'ร้านอาหาร',
+        email: 'test@example.com',
+        phone: '02-123-4567',
+        website: 'https://example.com',
+      }
+
+      // แทนที่ตัวแปรใน subject และ body
+      const subject = `[ทดสอบ] ${replaceVariables(template.subject, sampleData)}`
+      const htmlBody = replaceVariables(template.body_html, sampleData)
+
+      // เรียก Python API เพื่อส่ง email
+      let response: Response
+      try {
+        response = await fetch(`${PYTHON_API_URL}/api/v1/email/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from_email: DEFAULT_FROM_EMAIL,
+            to_email: input.toEmail,
+            subject,
+            html_body: htmlBody,
+          }),
+        })
+      } catch (err) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'ไม่สามารถเชื่อมต่อกับ email service ได้',
+          cause: err,
+        })
+      }
+
+      if (!response.ok) {
+        let detail = ''
+        try {
+          const body = await response.json() as { detail?: string }
+          detail = body.detail ?? ''
+        } catch {
+          // ignore parse error
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: detail
+            ? `ส่ง email ทดสอบไม่สำเร็จ: ${detail}`
+            : 'ส่ง email ทดสอบไม่สำเร็จ',
+        })
+      }
+
+      const result = await response.json() as { message_id?: string }
+
+      return {
+        success: true,
+        messageId: result.message_id ?? '',
+      }
     }),
 })
