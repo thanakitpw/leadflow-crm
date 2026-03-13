@@ -424,6 +424,35 @@ Migration ใหม่: `supabase/migrations/20260312000030_phase4_integration.s
 - `apps/web/src/components/sidebar.tsx` — เพิ่ม nav item "รายงาน" (BarChart3 icon)
 - `apps/web/src/server/routers/lead.ts` — เพิ่ม `lead.getEmailActivity` endpoint
 
+### Phase 4 — E2E Testing: Leads & Campaigns Pages (2026-03-13)
+ไฟล์อัพเดท:
+- `apps/web/e2e/leads.spec.ts` — Comprehensive Leads E2E tests: **25 tests**
+  - Lead List Page (10 tests): page loads, stat cards, filtering (status, email), sorting (score, name), pagination, export CSV, empty state
+  - Lead CRUD (12 tests): search page, create lead, detail page, edit status, add/remove tags, delete
+  - Bulk Operations (3 tests): select multiple, bulk delete, export CSV
+  - ✅ All tests use existing `test-base.ts` auth fixture
+  - ✅ Graceful skip for missing data (data-agnostic design)
+  - ✅ Thai language UI support
+  - ✅ Playwright best practices (getByRole, getByText, getByLabel)
+
+- `apps/web/e2e/campaigns.spec.ts` — Comprehensive Campaigns E2E tests: **17 tests**
+  - Campaign List (5 tests): page loads, table/empty state, filtering by status, create button
+  - Campaign CRUD (8 tests): create page, form validation, detail page, stats display, recipients list, audience preview, schedule options
+  - Campaign Actions (4 tests): pause campaign, cancel, stats update, empty state
+  - ✅ Consistent with Leads tests pattern
+  - ✅ Covers all manual test cases
+  - ✅ Robust error handling and fallbacks
+
+Key Features:
+- **42 total E2E tests** covering happy path + error cases
+- Helper functions: `getWorkspaceId()`, `navigateToLeads()`, `navigateToCampaigns()`
+- Resilient: `.catch(() => false)` for safe selector checks
+- Skip-friendly: `test.skip()` when prerequisites missing
+- No hardcoded test data, works with empty or populated database
+- 721 lines (leads) + 510 lines (campaigns) = 1,231 total lines
+
+Documentation: See `E2E_TEST_SUMMARY.md` for full details and test execution commands.
+
 ### Phase 4 — Testing: tRPC Router Tests (2026-03-13)
 ไฟล์ใหม่/อัพเดท:
 - `apps/web/src/__tests__/helpers/trpc-test.ts` — Enhanced helpers:
