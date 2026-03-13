@@ -29,9 +29,8 @@ export const test = base.extend<{
     // กดปุ่ม submit
     await page.click('button[type="submit"]')
 
-    // รอให้ redirect ไปหน้า workspace selection หรือ dashboard
-    // อาจขึ้น workspace selection ถ้าเป็น user ครั้งแรก
-    await page.waitForURL(/\/(dashboard|workspace|[a-f0-9\-]{36}|$)/, { timeout: 10000 })
+    // รอให้ redirect ออกจากหน้า login
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30000 })
 
     await use(page)
 

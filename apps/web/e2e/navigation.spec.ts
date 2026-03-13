@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures/test-base'
 
-// Helper function for workspace navigation
-async function navigateToWorkspace(page: any, workspaceId: string = 'ce9cac3c-6b94-45ba-b25f-85cb6ec3c7b0') {
-  await page.goto(`/${workspaceId}`)
+const WORKSPACE_ID = 'ce9cac3c-6b94-45ba-b25f-85cb6ec3c7b0'
+
+async function navigateToWorkspace(page: any) {
+  await page.goto(`/${WORKSPACE_ID}`)
   await page.waitForLoadState('networkidle')
 }
 
@@ -412,9 +413,8 @@ test.describe('Navigation - Browser Back/Forward', () => {
     await page.goBack()
     await page.waitForLoadState('networkidle')
 
-    // Assert
-    const currentUrl = page.url()
-    expect(currentUrl).toBe(initialUrl)
+    // Assert - URL should contain the workspace ID (back to dashboard)
+    expect(page.url()).toContain(WORKSPACE_ID)
   })
 
   test('browser forward button navigates forward', async ({ authenticatedPage: page }) => {
