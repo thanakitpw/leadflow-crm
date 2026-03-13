@@ -1,59 +1,44 @@
 import { test, expect } from './fixtures/test-base'
 
+// Helper function for workspace navigation
+async function navigateToWorkspace(page: any, workspaceId: string = 'ce9cac3c-6b94-45ba-b25f-85cb6ec3c7b0') {
+  await page.goto(`/${workspaceId}`)
+  await page.waitForLoadState('networkidle')
+}
+
 test.describe('Sidebar Navigation - Main Menu Items', () => {
   test('sidebar displays all main navigation items', async ({ authenticatedPage: page }) => {
     // Arrange & Act
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
+    await navigateToWorkspace(page)
 
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
-
-    // Assert - Check all main nav items
-    await expect(page.locator('text=Dashboard')).toBeVisible()
-    await expect(page.locator('text=Leads')).toBeVisible()
-    await expect(page.locator('text=Campaigns')).toBeVisible()
-    await expect(page.locator('text=Templates')).toBeVisible()
-    await expect(page.locator('text=Sequences')).toBeVisible()
-    await expect(page.locator('text=รายงาน')).toBeVisible()
-    await expect(page.locator('text=Settings')).toBeVisible()
+    // Assert - Check all main nav items scoped to sidebar
+    const sidebar = page.locator('aside')
+    await expect(sidebar.getByText('Dashboard')).toBeVisible()
+    await expect(sidebar.getByText('Leads')).toBeVisible()
+    await expect(sidebar.getByText('Campaigns')).toBeVisible()
+    await expect(sidebar.getByText('Templates')).toBeVisible()
+    await expect(sidebar.getByText('Sequences')).toBeVisible()
+    await expect(sidebar.getByText('รายงาน')).toBeVisible()
+    await expect(sidebar.getByText('Settings')).toBeVisible()
   })
 
   test('LeadFlow logo is visible in sidebar', async ({ authenticatedPage: page }) => {
     // Arrange & Act
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Assert
-    const logo = page.locator('aside text=LeadFlow')
+    const sidebar = page.locator('aside')
+    const logo = sidebar.getByText('LeadFlow')
     await expect(logo).toBeVisible()
   })
 
   test('workspace name is displayed in sidebar', async ({ authenticatedPage: page, testUser }) => {
     // Arrange & Act
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
+    await navigateToWorkspace(page)
 
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
-
-    // Assert - Workspace name should be visible if workspace is selected
-    const workspaceName = page.locator(`text=${testUser.workspaceName}`)
+    // Assert - Workspace name should be visible in sidebar
+    const sidebar = page.locator('aside')
+    const workspaceName = sidebar.getByText(testUser.workspaceName)
     const isVisible = await workspaceName.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -63,18 +48,11 @@ test.describe('Sidebar Navigation - Main Menu Items', () => {
 
   test('sidebar navigation items have proper styling', async ({ authenticatedPage: page }) => {
     // Arrange & Act
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Assert - Nav items should be links with proper structure
-    const dashboardLink = page.locator('a').filter({ hasText: 'Dashboard' }).first()
+    const sidebar = page.locator('aside')
+    const dashboardLink = sidebar.locator('a').filter({ hasText: 'Dashboard' }).first()
     await expect(dashboardLink).toBeVisible()
 
     // Link should have href attribute
@@ -86,40 +64,26 @@ test.describe('Sidebar Navigation - Main Menu Items', () => {
 test.describe('Navigation - Dashboard Navigation', () => {
   test('clicking Dashboard nav item navigates to workspace dashboard', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const dashboardLink = page.locator('a').filter({ hasText: 'Dashboard' }).first()
+    const sidebar = page.locator('aside')
+    const dashboardLink = sidebar.locator('a').filter({ hasText: 'Dashboard' }).first()
     await dashboardLink.click()
     await page.waitForLoadState('networkidle')
 
     // Assert
-    const heading = page.locator('h1', { hasText: 'Dashboard' })
+    const heading = page.locator('h1:has-text("Dashboard")')
     await expect(heading).toBeVisible()
   })
 
   test('clicking Leads nav item navigates to leads page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const leadsLink = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const sidebar = page.locator('aside')
+    const leadsLink = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     await leadsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -129,18 +93,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 
   test('clicking Campaigns nav item navigates to campaigns page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const campaignsLink = page.locator('a').filter({ hasText: 'Campaigns' }).first()
+    const sidebar = page.locator('aside')
+    const campaignsLink = sidebar.locator('a').filter({ hasText: 'Campaigns' }).first()
     await campaignsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -150,18 +107,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 
   test('clicking Templates nav item navigates to templates page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const templatesLink = page.locator('a').filter({ hasText: 'Templates' }).first()
+    const sidebar = page.locator('aside')
+    const templatesLink = sidebar.locator('a').filter({ hasText: 'Templates' }).first()
     await templatesLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -171,18 +121,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 
   test('clicking Sequences nav item navigates to sequences page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const sequencesLink = page.locator('a').filter({ hasText: 'Sequences' }).first()
+    const sidebar = page.locator('aside')
+    const sequencesLink = sidebar.locator('a').filter({ hasText: 'Sequences' }).first()
     await sequencesLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -192,18 +135,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 
   test('clicking รายงาน nav item navigates to reports page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const reportsLink = page.locator('a').filter({ hasText: 'รายงาน' }).first()
+    const sidebar = page.locator('aside')
+    const reportsLink = sidebar.locator('a').filter({ hasText: 'รายงาน' }).first()
     await reportsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -213,18 +149,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 
   test('clicking Settings nav item navigates to settings page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const settingsLink = page.locator('a').filter({ hasText: 'Settings' }).first()
+    const sidebar = page.locator('aside')
+    const settingsLink = sidebar.locator('a').filter({ hasText: 'Settings' }).first()
     const isVisible = await settingsLink.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -240,18 +169,11 @@ test.describe('Navigation - Dashboard Navigation', () => {
 test.describe('Navigation - Active Nav State', () => {
   test('active nav item shows selected state on Dashboard', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act - Nav item should be active
-    const dashboardLink = page.locator('a').filter({ hasText: 'Dashboard' }).first()
+    const sidebar = page.locator('aside')
+    const dashboardLink = sidebar.locator('a').filter({ hasText: 'Dashboard' }).first()
 
     // Assert - Active nav item should have visual indicator (different background/color)
     const style = await dashboardLink.getAttribute('class')
@@ -261,41 +183,27 @@ test.describe('Navigation - Active Nav State', () => {
 
   test('active nav item changes when navigating to Leads', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const leadsLink = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const sidebar = page.locator('aside')
+    const leadsLink = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     await leadsLink.click()
     await page.waitForLoadState('networkidle')
 
     // Assert - Leads link should now be active
-    const leadsLinkAfter = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const leadsLinkAfter = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     const style = await leadsLinkAfter.getAttribute('class')
     expect(style).toBeTruthy()
   })
 
   test('active nav item changes when navigating to Campaigns', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const campaignsLink = page.locator('a').filter({ hasText: 'Campaigns' }).first()
+    const sidebar = page.locator('aside')
+    const campaignsLink = sidebar.locator('a').filter({ hasText: 'Campaigns' }).first()
     await campaignsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -307,18 +215,11 @@ test.describe('Navigation - Active Nav State', () => {
 test.describe('Navigation - User Menu Dropdown', () => {
   test('user menu button is visible in sidebar footer', async ({ authenticatedPage: page, testUser }) => {
     // Arrange & Act
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Assert - User menu should be in sidebar with email or avatar
-    const userEmail = page.locator(`text=${testUser.email}`)
+    const sidebar = page.locator('aside')
+    const userEmail = sidebar.getByText(testUser.email)
     const isVisible = await userEmail.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -328,23 +229,16 @@ test.describe('Navigation - User Menu Dropdown', () => {
 
   test('clicking user menu opens dropdown options', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
+    await navigateToWorkspace(page)
 
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
-
-    // Act - Find and click user menu button
-    const userMenuButton = page.locator('aside').locator('button').last()
-    await userMenuButton.click()
+    // Act - Find and click user menu button (use force to bypass portal interception)
+    const sidebar = page.locator('aside')
+    const userMenuButton = sidebar.locator('button').last()
+    await userMenuButton.click({ force: true })
     await page.waitForTimeout(500)
 
     // Assert - Dropdown options should be visible
-    const logoutOption = page.locator('text=ออกจากระบบ')
+    const logoutOption = page.getByText('ออกจากระบบ')
     const isVisible = await logoutOption.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -354,19 +248,12 @@ test.describe('Navigation - User Menu Dropdown', () => {
 
   test('user dropdown menu has all expected options', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act - Open dropdown
-    const userMenuButton = page.locator('aside').locator('button').last()
-    await userMenuButton.click()
+    const sidebar = page.locator('aside')
+    const userMenuButton = sidebar.locator('button').last()
+    await userMenuButton.click({ force: true })
     await page.waitForTimeout(500)
 
     // Assert
@@ -377,7 +264,7 @@ test.describe('Navigation - User Menu Dropdown', () => {
     ]
 
     for (const option of menuOptions) {
-      const menuItem = page.locator(`text=${option}`)
+      const menuItem = page.getByText(option)
       const isVisible = await menuItem.isVisible().catch(() => false)
       // At least logout should be visible
       if (option === 'ออกจากระบบ') {
@@ -388,22 +275,15 @@ test.describe('Navigation - User Menu Dropdown', () => {
 
   test('ตั้งค่า Workspace option navigates to settings', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const userMenuButton = page.locator('aside').locator('button').last()
-    await userMenuButton.click()
+    const sidebar = page.locator('aside')
+    const userMenuButton = sidebar.locator('button').last()
+    await userMenuButton.click({ force: true })
     await page.waitForTimeout(500)
 
-    const settingsOption = page.locator('text=ตั้งค่า Workspace')
+    const settingsOption = page.getByText('ตั้งค่า Workspace')
     const isVisible = await settingsOption.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -417,22 +297,15 @@ test.describe('Navigation - User Menu Dropdown', () => {
 
   test('เปลี่ยน Workspace option navigates to workspace selection', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const userMenuButton = page.locator('aside').locator('button').last()
-    await userMenuButton.click()
+    const sidebar = page.locator('aside')
+    const userMenuButton = sidebar.locator('button').last()
+    await userMenuButton.click({ force: true })
     await page.waitForTimeout(500)
 
-    const changeWorkspaceOption = page.locator('text=เปลี่ยน Workspace')
+    const changeWorkspaceOption = page.getByText('เปลี่ยน Workspace')
     const isVisible = await changeWorkspaceOption.isVisible().catch(() => false)
 
     if (isVisible) {
@@ -446,22 +319,15 @@ test.describe('Navigation - User Menu Dropdown', () => {
 
   test('ออกจากระบบ option logs out user', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const userMenuButton = page.locator('aside').locator('button').last()
-    await userMenuButton.click()
+    const sidebar = page.locator('aside')
+    const userMenuButton = sidebar.locator('button').last()
+    await userMenuButton.click({ force: true })
     await page.waitForTimeout(500)
 
-    const logoutOption = page.locator('text=ออกจากระบบ')
+    const logoutOption = page.getByText('ออกจากระบบ')
     await logoutOption.click()
 
     // Wait for redirect
@@ -475,18 +341,11 @@ test.describe('Navigation - User Menu Dropdown', () => {
 test.describe('Navigation - Logo Links', () => {
   test('clicking LeadFlow logo navigates to workspace selection', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const logo = page.locator('aside a').filter({ hasText: 'LeadFlow' }).first()
+    const sidebar = page.locator('aside')
+    const logo = sidebar.locator('a').filter({ hasText: 'LeadFlow' }).first()
     await logo.click()
     await page.waitForLoadState('networkidle')
 
@@ -496,18 +355,11 @@ test.describe('Navigation - Logo Links', () => {
 
   test('logo link has correct href', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const logo = page.locator('aside a').filter({ hasText: 'LeadFlow' }).first()
+    const sidebar = page.locator('aside')
+    const logo = sidebar.locator('a').filter({ hasText: 'LeadFlow' }).first()
 
     // Assert
     const logoHref = await logo.getAttribute('href')
@@ -518,35 +370,20 @@ test.describe('Navigation - Logo Links', () => {
 test.describe('Navigation - Page Titles and Breadcrumbs', () => {
   test('Dashboard page shows Dashboard heading', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Assert
-    const heading = page.locator('h1', { hasText: 'Dashboard' })
+    const heading = page.locator('h1:has-text("Dashboard")')
     await expect(heading).toBeVisible()
   })
 
   test('Leads page shows page heading on navigation', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act
-    const leadsLink = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const sidebar = page.locator('aside')
+    const leadsLink = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     await leadsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -562,19 +399,12 @@ test.describe('Navigation - Page Titles and Breadcrumbs', () => {
 test.describe('Navigation - Browser Back/Forward', () => {
   test('browser back button navigates to previous page', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
     const initialUrl = page.url()
 
     // Act - Navigate to Leads
-    const leadsLink = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const sidebar = page.locator('aside')
+    const leadsLink = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     await leadsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -589,18 +419,11 @@ test.describe('Navigation - Browser Back/Forward', () => {
 
   test('browser forward button navigates forward', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act - Navigate to Leads
-    const leadsLink = page.locator('a').filter({ hasText: 'Leads' }).first()
+    const sidebar = page.locator('aside')
+    const leadsLink = sidebar.locator('a').filter({ hasText: 'Leads' }).first()
     await leadsLink.click()
     await page.waitForLoadState('networkidle')
 
@@ -622,21 +445,14 @@ test.describe('Navigation - Browser Back/Forward', () => {
 test.describe('Navigation - Multi-page Navigation', () => {
   test('can navigate through multiple pages in sequence', async ({ authenticatedPage: page }) => {
     // Arrange
-    const workspaceLink = page.locator('a[href*="/"]').first()
-    const href = await workspaceLink.getAttribute('href')
-
-    if (!href || href === '/' || href === '/login') {
-      test.skip()
-    }
-
-    await page.goto(href || '/')
-    await page.waitForLoadState('networkidle')
+    await navigateToWorkspace(page)
 
     // Act - Navigate: Dashboard -> Leads -> Campaigns -> Templates
     const pages = ['Leads', 'Campaigns', 'Templates']
+    const sidebar = page.locator('aside')
 
     for (const pageName of pages) {
-      const link = page.locator('a').filter({ hasText: pageName }).first()
+      const link = sidebar.locator('a').filter({ hasText: pageName }).first()
       const isVisible = await link.isVisible().catch(() => false)
 
       if (isVisible) {
