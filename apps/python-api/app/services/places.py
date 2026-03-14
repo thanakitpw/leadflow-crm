@@ -147,6 +147,7 @@ async def search_places(
                 },
                 "maxResultCount": 20,
                 "languageCode": "th",
+                "regionCode": "TH",
             }
 
             page_results, next_page_token = await _fetch_one_page(client, headers, payload)
@@ -246,6 +247,7 @@ async def search_nearby(
         "includedTypes": included_types[:50],  # API รองรับสูงสุด 50 types
         "maxResultCount": min(max_results, 20),
         "languageCode": "th",
+        "regionCode": "TH",
     }
 
     headers = {

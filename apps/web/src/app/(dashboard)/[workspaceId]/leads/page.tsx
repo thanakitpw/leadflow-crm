@@ -77,6 +77,7 @@ export default async function LeadsPage({ params, searchParams }: PageProps) {
             {canEdit && (
               <Link href={`/${workspaceId}/leads/search`}>
                 <Button
+                  className="text-white"
                   style={{ backgroundColor: "var(--color-primary)", borderRadius: "var(--radius-btn)" }}
                 >
                   <Search className="mr-2 h-4 w-4" />

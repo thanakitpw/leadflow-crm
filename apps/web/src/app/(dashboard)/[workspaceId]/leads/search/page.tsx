@@ -16,20 +16,31 @@ import {
   CheckSquare2,
   Square,
   AlertCircle,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { trpc } from "@/lib/trpc/client"
+import { PROVINCES } from "@/lib/thai-provinces"
+import type { District, ProvinceData } from "@/lib/thai-provinces"
 
 // ============================================================
 // Types
@@ -66,14 +77,6 @@ const CATEGORY_PRESETS = [
   { label: "B2B", keyword: "บริษัท B2B" },
 ]
 
-const CITY_PRESETS = [
-  { label: "กรุงเทพฯ (สีลม)", lat: 13.7248, lng: 100.5286 },
-  { label: "กรุงเทพฯ (สยาม)", lat: 13.7457, lng: 100.5334 },
-  { label: "เชียงใหม่", lat: 18.7883, lng: 98.9853 },
-  { label: "ภูเก็ต", lat: 7.8804, lng: 98.3923 },
-  { label: "ขอนแก่น", lat: 16.4322, lng: 102.8236 },
-]
-
 const RADIUS_OPTIONS = [
   { label: "500 ม.", value: 500 },
   { label: "1 กม.", value: 1000 },
@@ -86,7 +89,8 @@ const RADIUS_OPTIONS = [
 // Sub-components
 // ============================================================
 
-function StarRating({ rating }: { rating: number }) {
+function StarRating({ rating }: { rating: number | null | undefined }) {
+  if (rating == null) return null
   return (
     <span className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((star) => (
@@ -271,9 +275,27 @@ export default function LeadSearchPage() {
 
   // Form state
   const [keyword, setKeyword] = useState("")
-  const [lat, setLat] = useState<string>("13.7248")
-  const [lng, setLng] = useState<string>("100.5286")
+  const [provinceKey, setProvinceKey] = useState<string>("bangkok")
+  const [selectedDistricts, setSelectedDistricts] = useState<Set<number>>(new Set())
+  const [provinceOpen, setProvinceOpen] = useState(false)
   const [radius, setRadius] = useState(2000)
+  const [maxResults, setMaxResults] = useState(20)
+
+  const province = PROVINCES[provinceKey]
+  // ถ้าเลือกหลายย่าน ใช้ตัวแรกที่เลือก, ถ้าไม่เลือกเลยใช้กลางจังหวัด
+  const firstSelected = selectedDistricts.size > 0 ? Array.from(selectedDistricts)[0] : null
+  const selectedDistrict = firstSelected !== null ? province.districts[firstSelected] : null
+  const lat = selectedDistrict?.lat ?? province.lat
+  const lng = selectedDistrict?.lng ?? province.lng
+
+  const toggleDistrict = (idx: number) => {
+    setSelectedDistricts((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
 
   // Results + selection state
   const [results, setResults] = useState<PlaceResult[] | undefined>(undefined)
@@ -293,12 +315,6 @@ export default function LeadSearchPage() {
   // ค้นหา
   const handleSearch = useCallback(async () => {
     if (!keyword.trim()) return
-    const parsedLat = parseFloat(lat)
-    const parsedLng = parseFloat(lng)
-    if (isNaN(parsedLat) || isNaN(parsedLng)) {
-      setErrorMsg("พิกัดไม่ถูกต้อง กรุณาระบุ Latitude และ Longitude ให้ถูกต้อง")
-      return
-    }
 
     setIsSearching(true)
     setResults(undefined)
@@ -315,9 +331,10 @@ export default function LeadSearchPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           keyword: keyword.trim(),
-          latitude: parsedLat,
-          longitude: parsedLng,
+          latitude: lat,
+          longitude: lng,
           radius,
+          max_results: maxResults,
         }),
       })
 
@@ -370,15 +387,15 @@ export default function LeadSearchPage() {
     const selected = results.filter((r) => selectedIds.has(r.place_id))
     const leadsPayload = selected.map((p) => ({
       name: p.name,
-      address: p.address,
-      phone: p.phone,
-      website: p.website,
-      placeId: p.place_id,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      rating: p.rating,
-      reviewCount: p.review_count,
-      category: p.category,
+      address: p.address ?? undefined,
+      phone: p.phone ?? undefined,
+      website: p.website ?? undefined,
+      placeId: p.place_id ?? undefined,
+      latitude: p.latitude ?? undefined,
+      longitude: p.longitude ?? undefined,
+      rating: p.rating ?? undefined,
+      reviewCount: p.review_count ?? undefined,
+      category: p.category ?? undefined,
       sourceType: "places_api" as const,
     }))
 
@@ -389,10 +406,12 @@ export default function LeadSearchPage() {
       })
       setSaveResult(result)
       setSelectedIds(new Set())
-    } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : "ไม่สามารถบันทึก leads ได้"
-      )
+    } catch (err: unknown) {
+      console.error("Save leads error:", err)
+      const msg = err && typeof err === "object" && "message" in err
+        ? String((err as { message: string }).message)
+        : "ไม่สามารถบันทึก leads ได้"
+      setErrorMsg(msg)
     } finally {
       setIsSaving(false)
     }
@@ -492,59 +511,92 @@ export default function LeadSearchPage() {
               className="mb-1.5 block text-sm font-medium"
               style={{ color: "var(--color-ink)" }}
             >
-              พิกัดตำแหน่ง
+              พื้นที่ค้นหา
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label
-                  className="mb-1 block text-xs"
-                  style={{ color: "var(--color-muted)" }}
+            <Popover open={provinceOpen} onOpenChange={setProvinceOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={provinceOpen}
+                  className="h-10 w-full justify-between text-sm font-normal"
+                  style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-input)" }}
                 >
-                  Latitude (ละติจูด)
-                </label>
-                <Input
-                  placeholder="13.7248"
-                  value={lat}
-                  onChange={(e) => setLat(e.target.value)}
-                  style={{ borderRadius: "var(--radius-input)" }}
-                />
+                  <span className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 shrink-0" style={{ color: "var(--color-primary)" }} />
+                    {province.label}
+                  </span>
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[var(--radix-popover-trigger-width)] p-0"
+                align="start"
+                style={{ backgroundColor: "white", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)" }}
+              >
+                <Command>
+                  <CommandInput placeholder="ค้นหาจังหวัด..." />
+                  <CommandList>
+                    <CommandEmpty>ไม่พบจังหวัด</CommandEmpty>
+                    <CommandGroup>
+                      {Object.entries(PROVINCES).map(([key, prov]) => (
+                        <CommandItem
+                          key={key}
+                          value={prov.label}
+                          onSelect={() => {
+                            setProvinceKey(key)
+                            setSelectedDistricts(new Set())
+                            setProvinceOpen(false)
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              provinceKey === key ? "opacity-100" : "opacity-0"
+                            )}
+                            style={{ color: "var(--color-primary)" }}
+                          />
+                          {prov.label}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            {/* Districts */}
+            {province.districts.length > 0 && (
+              <div className="mt-2.5">
+                <p className="mb-1.5 text-xs" style={{ color: "var(--color-muted)" }}>
+                  ย่าน / อำเภอ {selectedDistricts.size > 0 && (
+                    <span style={{ color: "var(--color-primary)" }}>
+                      ({selectedDistricts.size} เลือกแล้ว)
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {province.districts.map((d, idx) => {
+                    const isActive = selectedDistricts.has(idx)
+                    return (
+                      <button
+                        key={d.label}
+                        onClick={() => toggleDistrict(idx)}
+                        className="flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150"
+                        style={{
+                          borderColor: isActive ? "var(--color-primary)" : "var(--color-border)",
+                          color: isActive ? "var(--color-primary)" : "var(--color-muted)",
+                          backgroundColor: isActive ? "var(--color-primary-light)" : "transparent",
+                        }}
+                      >
+                        <MapPin className="h-3 w-3" />
+                        {d.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-              <div>
-                <label
-                  className="mb-1 block text-xs"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Longitude (ลองจิจูด)
-                </label>
-                <Input
-                  placeholder="100.5286"
-                  value={lng}
-                  onChange={(e) => setLng(e.target.value)}
-                  style={{ borderRadius: "var(--radius-input)" }}
-                />
-              </div>
-            </div>
-            {/* City Presets */}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {CITY_PRESETS.map((city) => (
-                <button
-                  key={city.label}
-                  onClick={() => {
-                    setLat(city.lat.toString())
-                    setLng(city.lng.toString())
-                  }}
-                  className="flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors hover:border-primary"
-                  style={{
-                    borderColor: "var(--color-border)",
-                    color: "var(--color-muted)",
-                    borderRadius: "9999px",
-                  }}
-                >
-                  <MapPin className="h-3 w-3" />
-                  {city.label}
-                </button>
-              ))}
-            </div>
+            )}
           </div>
 
           {/* Radius */}
@@ -591,11 +643,60 @@ export default function LeadSearchPage() {
             </div>
           </div>
 
+          {/* Max Results */}
+          <div className="mb-6">
+            <div className="mb-2 flex items-center justify-between">
+              <label
+                className="text-sm font-medium"
+                style={{ color: "var(--color-ink)" }}
+              >
+                จำนวน Lead ที่ต้องการ
+              </label>
+              <span
+                className="text-sm font-semibold"
+                style={{ color: "var(--color-primary)" }}
+              >
+                {maxResults} รายการ
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[10, 20, 40, 60].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setMaxResults(n)}
+                  className="rounded-lg border px-4 py-2 text-sm font-medium transition-all duration-150"
+                  style={{
+                    borderColor: maxResults === n ? "var(--color-primary)" : "var(--color-border)",
+                    color: maxResults === n ? "var(--color-primary)" : "var(--color-muted)",
+                    backgroundColor: maxResults === n ? "var(--color-primary-light)" : "transparent",
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={maxResults}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value)
+                  if (!isNaN(v) && v >= 1 && v <= 60) setMaxResults(v)
+                }}
+                className="h-9 w-20 text-center text-sm"
+                style={{ borderRadius: "var(--radius-input)" }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs" style={{ color: "var(--color-muted)" }}>
+              Places API ให้ผลลัพธ์สูงสุด 60 รายการต่อครั้ง
+            </p>
+          </div>
+
           {/* Submit */}
           <Button
             onClick={handleSearch}
             disabled={isSearching || !keyword.trim()}
-            className="w-full"
+            className="w-full text-white"
             style={{
               backgroundColor: "var(--color-primary)",
               borderRadius: "var(--radius-btn)",
@@ -708,8 +809,9 @@ export default function LeadSearchPage() {
                 <Button
                   onClick={handleSaveBulk}
                   disabled={isSaving}
+                  className="text-white"
                   style={{
-                    backgroundColor: "var(--color-success)",
+                    backgroundColor: "var(--color-primary)",
                     borderRadius: "var(--radius-btn)",
                   }}
                 >

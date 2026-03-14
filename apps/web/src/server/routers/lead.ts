@@ -243,7 +243,7 @@ export const leadRouter = router({
           latitude: input.latitude ?? null,
           longitude: input.longitude ?? null,
           rating: input.rating ?? null,
-          review_count: input.reviewCount ?? null,
+          review_count: input.reviewCount ?? 0,
           category: input.category ?? null,
           source_type: input.sourceType,
           status: 'new',
@@ -303,7 +303,7 @@ export const leadRouter = router({
           latitude: l.latitude ?? null,
           longitude: l.longitude ?? null,
           rating: l.rating ?? null,
-          review_count: l.reviewCount ?? null,
+          review_count: l.reviewCount ?? 0,
           category: l.category ?? null,
           source_type: l.sourceType,
           status: 'new',
@@ -319,9 +319,10 @@ export const leadRouter = router({
         .select('id')
 
       if (error) {
+        console.error('Supabase insert leads error:', error)
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'ไม่สามารถบันทึก leads ได้',
+          message: `ไม่สามารถบันทึก leads ได้: ${error.message}`,
           cause: error,
         })
       }

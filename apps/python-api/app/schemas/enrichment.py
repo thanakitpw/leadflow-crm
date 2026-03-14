@@ -42,8 +42,8 @@ class EmailResult(BaseModel):
     confidence: float = Field(
         ...,
         ge=0.0,
-        le=1.0,
-        description="ความมั่นใจ 0.0-1.0 (mailto=0.95, scraped=0.90, regex=0.80, claude=0.75, pattern=0.50)",
+        le=100.0,
+        description="ความมั่นใจ 0-100 (mailto=95, scraped=90, regex=80, claude=75, pattern=50)",
     )
     verified: bool = Field(
         default=False,

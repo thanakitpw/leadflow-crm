@@ -16,6 +16,7 @@ import {
   Filter,
   AlertTriangle,
   GitBranch,
+  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -172,6 +173,15 @@ export default function LeadListClient({
   const [enrollSequenceId, setEnrollSequenceId] = useState<string>("")
   const [enrolling, setEnrolling] = useState(false)
 
+  // Bulk find email dialog
+  const [findEmailOpen, setFindEmailOpen] = useState(false)
+  const [findingEmails, setFindingEmails] = useState(false)
+  const [findEmailProgress, setFindEmailProgress] = useState<{
+    done: number
+    total: number
+    found: number
+  } | null>(null)
+
   // ดึงข้อมูล
   const fetchLeads = useCallback(async () => {
     setLoading(true)
@@ -287,6 +297,74 @@ export default function LeadListClient({
     }
   }
 
+  // Bulk find email
+  const handleBulkFindEmail = async () => {
+    if (!data) return
+    const leadsToProcess = data.leads.filter(
+      (l) => selectedIds.has(l.id) && l.website && !l.email
+    )
+    if (leadsToProcess.length === 0) {
+      toast.info("leads ที่เลือกไม่มีรายการที่หา Email ได้ (ต้องมีเว็บไซต์และยังไม่มีอีเมล)")
+      setFindEmailOpen(false)
+      return
+    }
+
+    setFindingEmails(true)
+    setFindEmailProgress({ done: 0, total: leadsToProcess.length, found: 0 })
+
+    const pythonApiUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL ?? "http://localhost:8000"
+    const CONCURRENCY = 3
+    let done = 0
+    let found = 0
+
+    const processLead = async (lead: Lead) => {
+      try {
+        const res = await fetch(`${pythonApiUrl}/api/v1/enrichment/find-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website: lead.website }),
+        })
+        if (!res.ok) return
+        const result = await res.json() as {
+          emails?: { email: string; confidence: number; source: string }[]
+          emails_found?: { email: string; confidence: number; source: string }[]
+        }
+        const emailList = result.emails ?? result.emails_found ?? []
+        if (emailList.length > 0) {
+          const best = emailList[0]
+          await trpc.lead.update.mutate({
+            workspaceId,
+            leadId: lead.id,
+            email: best.email,
+          })
+          found++
+        }
+      } catch {
+        // skip failed leads — ดำเนินต่อกับ lead อื่น
+      } finally {
+        done++
+        setFindEmailProgress({ done, total: leadsToProcess.length, found })
+      }
+    }
+
+    // Process with concurrency limit
+    const queue = [...leadsToProcess]
+    const workers = Array.from({ length: CONCURRENCY }, async () => {
+      while (queue.length > 0) {
+        const lead = queue.shift()
+        if (lead) await processLead(lead)
+      }
+    })
+    await Promise.all(workers)
+
+    setFindingEmails(false)
+    setFindEmailOpen(false)
+    setFindEmailProgress(null)
+
+    toast.success(`พบอีเมล ${found} จาก ${leadsToProcess.length} leads`)
+    fetchLeads()
+  }
+
   // Export CSV
   const handleExport = async () => {
     setExporting(true)
@@ -311,18 +389,22 @@ export default function LeadListClient({
     >
       {/* Toolbar */}
       <div
-        className="flex flex-wrap items-center gap-3 border-b px-5 py-4"
+        className="flex flex-wrap items-center gap-2 border-b px-5 py-4"
         style={{ borderColor: "var(--color-border)" }}
       >
         <Filter className="h-4 w-4 shrink-0" style={{ color: "var(--color-muted)" }} />
 
         {/* Status filter */}
         <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1) }}>
-          <SelectTrigger className="h-8 w-36 text-xs">
-            <SelectValue placeholder="สถานะ" />
+          <SelectTrigger
+            label="สถานะ"
+            className="h-8 rounded-lg text-xs"
+            style={{ backgroundColor: "var(--color-canvas)" }}
+          >
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">สถานะ: ทั้งหมด</SelectItem>
+            <SelectItem value="all">ทั้งหมด</SelectItem>
             <SelectItem value="new">ใหม่</SelectItem>
             <SelectItem value="contacted">ติดต่อแล้ว</SelectItem>
             <SelectItem value="qualified">คัดแล้ว</SelectItem>
@@ -332,11 +414,15 @@ export default function LeadListClient({
 
         {/* Email filter */}
         <Select value={hasEmail} onValueChange={(v) => { setHasEmail(v); setPage(1) }}>
-          <SelectTrigger className="h-8 w-36 text-xs">
-            <SelectValue placeholder="อีเมล" />
+          <SelectTrigger
+            label="อีเมล"
+            className="h-8 rounded-lg text-xs"
+            style={{ backgroundColor: "var(--color-canvas)" }}
+          >
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">อีเมล: ทั้งหมด</SelectItem>
+            <SelectItem value="all">ทั้งหมด</SelectItem>
             <SelectItem value="yes">มีอีเมล</SelectItem>
             <SelectItem value="no">ไม่มีอีเมล</SelectItem>
           </SelectContent>
@@ -344,8 +430,12 @@ export default function LeadListClient({
 
         {/* Sort */}
         <Select value={sortBy} onValueChange={(v) => { setSortBy(v as SortBy); setPage(1) }}>
-          <SelectTrigger className="h-8 w-40 text-xs">
-            <SelectValue placeholder="เรียงตาม" />
+          <SelectTrigger
+            label="เรียง"
+            className="h-8 rounded-lg text-xs"
+            style={{ backgroundColor: "var(--color-canvas)" }}
+          >
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="created_desc">ล่าสุดก่อน</SelectItem>
@@ -373,6 +463,16 @@ export default function LeadListClient({
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" style={{ color: "#7C3AED" }} />
               ให้คะแนน AI
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setFindEmailOpen(true)}
+              style={{ borderRadius: "var(--radius-btn)" }}
+            >
+              <Mail className="mr-1.5 h-3.5 w-3.5" style={{ color: "var(--color-info)" }} />
+              หา Email
             </Button>
             <Button
               variant="outline"
@@ -436,7 +536,7 @@ export default function LeadListClient({
             className="flex h-14 w-14 items-center justify-center rounded-full"
             style={{ backgroundColor: "var(--color-primary-light)" }}
           >
-            <Mail className="h-7 w-7" style={{ color: "var(--color-primary)" }} />
+            <Search className="h-7 w-7" style={{ color: "var(--color-primary)" }} />
           </div>
           <p className="font-medium" style={{ color: "var(--color-ink)" }}>
             ยังไม่มี leads
@@ -444,6 +544,17 @@ export default function LeadListClient({
           <p className="text-sm" style={{ color: "var(--color-muted)" }}>
             เริ่มด้วยการค้นหา lead จาก Places API
           </p>
+          {canEdit && (
+            <Link href={`/${workspaceId}/leads/search`}>
+              <Button
+                className="mt-2 text-white"
+                style={{ backgroundColor: "var(--color-primary)", borderRadius: "var(--radius-btn)" }}
+              >
+                <Search className="mr-2 h-4 w-4" />
+                ค้นหา Lead ใหม่
+              </Button>
+            </Link>
+          )}
         </div>
       ) : (
         <Table>
@@ -461,7 +572,10 @@ export default function LeadListClient({
                 ชื่อธุรกิจ
               </TableHead>
               <TableHead className="font-semibold" style={{ color: "var(--color-ink)" }}>
-                ติดต่อ
+                อีเมล
+              </TableHead>
+              <TableHead className="font-semibold" style={{ color: "var(--color-ink)" }}>
+                เบอร์โทร
               </TableHead>
               <TableHead className="font-semibold" style={{ color: "var(--color-ink)" }}>
                 คะแนน AI
@@ -512,31 +626,26 @@ export default function LeadListClient({
                     )}
                   </TableCell>
 
-                  {/* ติดต่อ */}
+                  {/* อีเมล */}
                   <TableCell>
-                    <div className="space-y-1">
-                      {lead.email && (
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" style={{ color: "var(--color-muted)" }} />
-                          <span className="text-xs truncate max-w-[160px]" style={{ color: "var(--color-muted)" }}>
-                            {lead.email}
-                          </span>
-                        </div>
-                      )}
-                      {lead.phone && (
-                        <div className="flex items-center gap-1">
-                          <Phone className="h-3 w-3" style={{ color: "var(--color-muted)" }} />
-                          <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-                            {lead.phone}
-                          </span>
-                        </div>
-                      )}
-                      {!lead.email && !lead.phone && (
-                        <span className="text-xs" style={{ color: "var(--color-border)" }}>
-                          —
-                        </span>
-                      )}
-                    </div>
+                    {lead.email ? (
+                      <span className="text-xs truncate max-w-[180px] block" style={{ color: "var(--color-ink)" }}>
+                        {lead.email}
+                      </span>
+                    ) : (
+                      <span className="text-xs" style={{ color: "var(--color-border)" }}>—</span>
+                    )}
+                  </TableCell>
+
+                  {/* เบอร์โทร */}
+                  <TableCell>
+                    {lead.phone ? (
+                      <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                        {lead.phone}
+                      </span>
+                    ) : (
+                      <span className="text-xs" style={{ color: "var(--color-border)" }}>—</span>
+                    )}
                   </TableCell>
 
                   {/* AI Score */}
@@ -645,6 +754,86 @@ export default function LeadListClient({
           </div>
         </div>
       )}
+
+      {/* Bulk Find Email Dialog */}
+      <Dialog
+        open={findEmailOpen}
+        onOpenChange={(open) => {
+          if (!findingEmails) setFindEmailOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <div className="mb-1 flex items-center gap-3">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-full"
+                style={{ backgroundColor: "var(--color-primary-light)" }}
+              >
+                <Mail className="h-5 w-5" style={{ color: "var(--color-primary)" }} />
+              </div>
+              <div>
+                <DialogTitle style={{ color: "var(--color-ink)" }}>หา Email อัตโนมัติ</DialogTitle>
+              </div>
+            </div>
+            <DialogDescription style={{ color: "var(--color-muted)" }}>
+              ระบบจะค้นหาอีเมลจากเว็บไซต์ของ leads ที่เลือก ({selectedIds.size} รายการ)
+              โดยจะข้าม leads ที่มีอีเมลอยู่แล้วหรือไม่มีเว็บไซต์
+            </DialogDescription>
+          </DialogHeader>
+
+          {findEmailProgress && (
+            <div
+              className="rounded-xl p-4"
+              style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}
+            >
+              <div
+                className="mb-3 h-2.5 w-full overflow-hidden rounded-full"
+                style={{ backgroundColor: "var(--color-subtle)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.round((findEmailProgress.done / findEmailProgress.total) * 100)}%`,
+                    backgroundColor: "var(--color-info)",
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+                  {findEmailProgress.done} / {findEmailProgress.total} รายการ
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "var(--color-success)" }}>
+                  พบ {findEmailProgress.found} อีเมล
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setFindEmailOpen(false)}
+              disabled={findingEmails}
+              style={{ borderRadius: "var(--radius-btn)", borderColor: "var(--color-border)" }}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleBulkFindEmail}
+              disabled={findingEmails}
+              className="text-white"
+              style={{ backgroundColor: "var(--color-primary)", borderRadius: "var(--radius-btn)" }}
+            >
+              {findingEmails ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="mr-2 h-4 w-4" />
+              )}
+              {findingEmails ? "กำลังค้นหา..." : `หา Email (${selectedIds.size} leads)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Enroll in Sequence Dialog */}
       <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
