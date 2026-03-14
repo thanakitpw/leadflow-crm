@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.v1.endpoints import health, places, enrichment, scoring, orchestrator, email, tracking, report
+from app.api.v1.endpoints import health, places, enrichment, scoring, orchestrator, email, tracking, report, social
 
 app = FastAPI(
     title="LeadFlow Python API",
@@ -41,6 +41,9 @@ app.include_router(tracking.router, prefix="/api/v1", tags=["Tracking"])
 
 # Report — HTML report generation (Phase 4)
 app.include_router(report.router, prefix="/api/v1", tags=["Report"])
+
+# Social Media Finder — Facebook Page + LINE OA
+app.include_router(social.router, prefix="/api/v1", tags=["Social Media Finder"])
 
 
 @app.get("/")

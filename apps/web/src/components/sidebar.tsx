@@ -308,10 +308,16 @@ export default function Sidebar({
 
             <ul className="space-y-0.5">
               {section.items.map(({ href, label, icon: Icon, badge }) => {
+                // Collect all sibling hrefs to prevent parent matching when child has its own nav item
+                const allHrefs = section.items.map((i) => i.href)
                 const isActive =
                   href === `/${workspaceId}`
                     ? pathname === `/${workspaceId}`
-                    : href !== "#" && pathname.startsWith(href)
+                    : href !== "#" && (
+                        pathname === href ||
+                        (pathname.startsWith(href + "/") &&
+                          !allHrefs.some((other) => other !== href && other.startsWith(href + "/") && pathname.startsWith(other)))
+                      )
 
                 const linkContent = (
                   <Link

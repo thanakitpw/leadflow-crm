@@ -18,6 +18,8 @@ import {
   Download,
   AlertCircle,
   Star,
+  Facebook,
+  MessageCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -58,6 +60,14 @@ interface PlaceResult {
   cached?: boolean
 }
 
+interface SocialLink {
+  platform: string
+  url: string | null
+  handle: string | null
+  source: string
+  confidence: number
+}
+
 interface EnrichedResult extends PlaceResult {
   email?: string
   emailConfidence?: number
@@ -65,6 +75,11 @@ interface EnrichedResult extends PlaceResult {
   isEnriching?: boolean
   enrichFailed?: boolean
   score?: number
+  // Social media fields
+  facebook?: SocialLink | null
+  line?: SocialLink | null
+  isSocialEnriching?: boolean
+  socialEnrichFailed?: boolean
 }
 
 interface SearchResponse {
@@ -87,7 +102,7 @@ const SUB_CATEGORIES: Record<Category, string[]> = {
   B2B: ["IT/Software", "การตลาด", "ที่ปรึกษา", "โรงงาน", "โลจิสติกส์"],
 }
 
-const MAX_RESULTS_OPTIONS = [10, 20, 50, 100, 200]
+const MAX_RESULTS_OPTIONS = [10, 20, 40, 60]
 
 const RADIUS_OPTIONS = [
   { label: "500ม.", value: 500 },
@@ -273,7 +288,7 @@ function LeadListRow({
           )}
         </div>
 
-        {/* Row 3: rating + phone */}
+        {/* Row 3: rating + phone + website */}
         <div className="mt-0.5 flex flex-wrap items-center gap-2">
           {result.rating != null && <StarRating rating={result.rating} />}
           {result.phone && (
@@ -296,6 +311,46 @@ function LeadListRow({
             </a>
           )}
         </div>
+
+        {/* Row 4: Social links */}
+        {(result.facebook || result.line || result.isSocialEnriching) && (
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {result.isSocialEnriching && !result.facebook && !result.line && (
+              <span className="flex items-center gap-1 text-[11px]" style={{ color: "var(--color-warning)" }}>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                กำลังค้นหาโซเชียล...
+              </span>
+            )}
+            {result.facebook?.url && (
+              <a
+                href={result.facebook.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] hover:underline"
+                style={{ color: "#1877F2" }}
+                onClick={(e) => e.stopPropagation()}
+                title={`Facebook: ${result.facebook.handle ?? result.facebook.url}`}
+              >
+                <Facebook className="h-3 w-3" />
+                {result.facebook.handle ?? "Facebook Page"}
+              </a>
+            )}
+            {result.line?.url && (
+              <a
+                href={result.line.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] hover:underline"
+                style={{ color: "#06C755" }}
+                onClick={(e) => e.stopPropagation()}
+                title={`LINE: ${result.line.handle ?? result.line.url}`}
+              >
+                <MessageCircle className="h-3 w-3" />
+                {result.line.handle ?? "LINE OA"}
+              </a>
+            )}
+          </div>
+        )}
       </label>
 
       {/* Score */}
@@ -440,6 +495,46 @@ function LeadGridCard({
             ไม่พบอีเมล
           </span>
         )}
+
+        {/* Social links */}
+        {(result.facebook || result.line || result.isSocialEnriching) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            {result.isSocialEnriching && !result.facebook && !result.line && (
+              <span className="flex items-center gap-1 text-[11px]" style={{ color: "var(--color-warning)" }}>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                ค้นหาโซเชียล...
+              </span>
+            )}
+            {result.facebook?.url && (
+              <a
+                href={result.facebook.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] hover:underline"
+                style={{ color: "#1877F2" }}
+                onClick={(e) => e.stopPropagation()}
+                title={`Facebook: ${result.facebook.handle ?? result.facebook.url}`}
+              >
+                <Facebook className="h-3 w-3" />
+                {result.facebook.handle ?? "Facebook"}
+              </a>
+            )}
+            {result.line?.url && (
+              <a
+                href={result.line.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] hover:underline"
+                style={{ color: "#06C755" }}
+                onClick={(e) => e.stopPropagation()}
+                title={`LINE: ${result.line.handle ?? result.line.url}`}
+              >
+                <MessageCircle className="h-3 w-3" />
+                {result.line.handle ?? "LINE OA"}
+              </a>
+            )}
+          </div>
+        )}
       </label>
     </div>
   )
@@ -461,12 +556,13 @@ export default function LeadSearchPage() {
   const [selectedDistricts, setSelectedDistricts] = useState<Set<number>>(new Set())
   const [provinceOpen, setProvinceOpen] = useState(false)
   const [radius, setRadius] = useState(2000)
-  const [maxResults, setMaxResults] = useState(200)
+  const [maxResults, setMaxResults] = useState(20)
 
   // Enrichment options
   const [enrichEmail, setEnrichEmail] = useState(true)
-  const [enrichScore, setEnrichScore] = useState(true)
+  const [enrichScore, setEnrichScore] = useState(false)
   const [enrichSocial, setEnrichSocial] = useState(false)
+  const [onlyWithWebsite, setOnlyWithWebsite] = useState(false)
 
   // View
   const [viewMode, setViewMode] = useState<"list" | "grid">("list")
@@ -634,6 +730,102 @@ export default function LeadSearchPage() {
   }, [])
 
   // ============================================================
+  // Social Media Enrichment
+  // ============================================================
+
+  const runSocialEnrichment = useCallback(async (places: PlaceResult[]) => {
+    const pythonApiUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL ?? "http://localhost:8000"
+
+    // เฉพาะ places ที่มี website เท่านั้น
+    const toEnrich = places.filter((p) => p.website)
+    if (toEnrich.length === 0) return
+
+    // Mark ทั้งหมดว่ากำลัง enrich social
+    setResults((prev) => {
+      if (!prev) return prev
+      const updated = prev.map((r) =>
+        r.website ? { ...r, isSocialEnriching: true } : r
+      )
+      resultsRef.current = updated
+      return updated
+    })
+
+    let activeCount = 0
+    let index = 0
+
+    const processNext = async () => {
+      if (index >= toEnrich.length) return
+      const place = toEnrich[index++]
+      activeCount++
+
+      try {
+        const res = await fetch(`${pythonApiUrl}/api/v1/social/find`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website: place.website }),
+        })
+
+        if (res.ok) {
+          const data = await res.json() as {
+            facebook?: SocialLink | null
+            line?: SocialLink | null
+          }
+
+          setResults((prev) => {
+            if (!prev) return prev
+            const updated = prev.map((r) =>
+              r.place_id === place.place_id
+                ? {
+                    ...r,
+                    isSocialEnriching: false,
+                    facebook: data.facebook ?? null,
+                    line: data.line ?? null,
+                    socialEnrichFailed: !data.facebook && !data.line,
+                  }
+                : r
+            )
+            resultsRef.current = updated
+            return updated
+          })
+        } else {
+          setResults((prev) => {
+            if (!prev) return prev
+            const updated = prev.map((r) =>
+              r.place_id === place.place_id
+                ? { ...r, isSocialEnriching: false, socialEnrichFailed: true }
+                : r
+            )
+            resultsRef.current = updated
+            return updated
+          })
+        }
+      } catch {
+        setResults((prev) => {
+          if (!prev) return prev
+          const updated = prev.map((r) =>
+            r.place_id === place.place_id
+              ? { ...r, isSocialEnriching: false, socialEnrichFailed: true }
+              : r
+          )
+          resultsRef.current = updated
+          return updated
+        })
+      } finally {
+        activeCount--
+
+        if (index < toEnrich.length && activeCount < ENRICHMENT_CONCURRENCY) {
+          void processNext()
+        }
+      }
+    }
+
+    const initialBatch = Math.min(ENRICHMENT_CONCURRENCY, toEnrich.length)
+    for (let i = 0; i < initialBatch; i++) {
+      void processNext()
+    }
+  }, [])
+
+  // ============================================================
   // Search
   // ============================================================
 
@@ -668,7 +860,10 @@ export default function LeadSearchPage() {
       }
 
       const data: SearchResponse = await res.json()
-      const enrichedResults: EnrichedResult[] = data.results ?? []
+      let enrichedResults: EnrichedResult[] = data.results ?? []
+      if (onlyWithWebsite) {
+        enrichedResults = enrichedResults.filter((r) => r.website)
+      }
       resultsRef.current = enrichedResults
       setResults(enrichedResults)
 
@@ -676,12 +871,16 @@ export default function LeadSearchPage() {
       if (enrichEmail && enrichedResults.length > 0) {
         void runEnrichment(enrichedResults)
       }
+      // Start social enrichment if enabled (parallel กับ email enrichment)
+      if (enrichSocial && enrichedResults.length > 0) {
+        void runSocialEnrichment(enrichedResults)
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการค้นหา")
     } finally {
       setIsSearching(false)
     }
-  }, [keyword, Array.from(selectedSubCategories).join(" "), selectedCategory, lat, lng, radius, maxResults, enrichEmail, runEnrichment])
+  }, [keyword, Array.from(selectedSubCategories).join(" "), selectedCategory, lat, lng, radius, maxResults, enrichEmail, enrichSocial, onlyWithWebsite, runEnrichment, runSocialEnrichment])
 
   // ============================================================
   // Selection
@@ -711,13 +910,15 @@ export default function LeadSearchPage() {
 
   const handleExportCSV = () => {
     if (!results || results.length === 0) return
-    const headers = ["ชื่อ", "ที่อยู่", "โทร", "เว็บไซต์", "อีเมล", "หมวดหมู่", "คะแนน"]
+    const headers = ["ชื่อ", "ที่อยู่", "โทร", "เว็บไซต์", "อีเมล", "Facebook", "LINE", "หมวดหมู่", "คะแนน"]
     const rows = results.map((r) => [
       r.name,
       r.address ?? "",
       r.phone ?? "",
       r.website ?? "",
       r.email ?? "",
+      r.facebook?.url ?? r.facebook?.handle ?? "",
+      r.line?.url ?? r.line?.handle ?? "",
       r.category ?? "",
       r.score?.toString() ?? "",
     ])
@@ -797,7 +998,7 @@ export default function LeadSearchPage() {
             ค้นหา Lead ใหม่
           </h1>
           <p className="text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>
-            ค้นหาธุรกิจจาก Google Places API
+            ค้นหาธุรกิจจาก Google Maps
           </p>
         </div>
 
@@ -1040,7 +1241,7 @@ export default function LeadSearchPage() {
                   onCheckedChange={(v) => setEnrichEmail(Boolean(v))}
                 />
                 <span className="text-xs" style={{ color: "var(--color-ink)" }}>
-                  ค้นหาอีเมล (self-built)
+                  ค้นหาอีเมล
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
@@ -1048,8 +1249,8 @@ export default function LeadSearchPage() {
                   checked={enrichScore}
                   onCheckedChange={(v) => setEnrichScore(Boolean(v))}
                 />
-                <span className="text-xs" style={{ color: "var(--color-ink)" }}>
-                  AI Lead Score (Claude)
+                <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  AI Lead Score
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
@@ -1057,8 +1258,17 @@ export default function LeadSearchPage() {
                   checked={enrichSocial}
                   onCheckedChange={(v) => setEnrichSocial(Boolean(v))}
                 />
-                <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-                  Social Media Links
+                <span className="text-xs" style={{ color: "var(--color-ink)" }}>
+                  ค้นหาโซเชียลมีเดีย (FB + LINE)
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <Checkbox
+                  checked={onlyWithWebsite}
+                  onCheckedChange={(v) => setOnlyWithWebsite(Boolean(v))}
+                />
+                <span className="text-xs" style={{ color: "var(--color-ink)" }}>
+                  เฉพาะลีดที่มีเว็บไซต์
                 </span>
               </label>
             </div>

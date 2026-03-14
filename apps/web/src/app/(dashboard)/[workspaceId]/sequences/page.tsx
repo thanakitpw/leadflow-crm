@@ -37,64 +37,42 @@ export default async function SequencesPage({ params, searchParams }: PageProps)
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
 
-  const { count: activeSequences } = await supabase
-    .from("sequences")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId)
-    .eq("status", "active")
+  const total = totalSequences ?? 0
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
       <div className="px-8 py-8">
         {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-              Email Sequences
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: "var(--color-ink)", letterSpacing: "-0.01em" }}
+            >
+              ลำดับอีเมล
             </h1>
             <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-              สร้าง sequences อีเมลอัตโนมัติ ({totalSequences ?? 0} sequences)
+              {total > 0
+                ? `${total} ลำดับ · ส่งอีเมลอัตโนมัติตามลำดับที่กำหนด`
+                : "ส่งอีเมลอัตโนมัติตามลำดับที่กำหนด"}
             </p>
           </div>
           {canEdit && (
             <Link href={`/${workspaceId}/sequences/new`}>
               <Button
+                className="text-white"
                 style={{
                   backgroundColor: "var(--color-primary)",
                   borderRadius: "var(--radius-btn)",
+                  fontSize: "14px",
+                  fontWeight: 500,
                 }}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                สร้าง Sequence
+                สร้างลำดับใหม่
               </Button>
             </Link>
           )}
-        </div>
-
-        {/* Stats */}
-        <div className="mb-6 grid grid-cols-2 gap-4 max-w-sm">
-          <div
-            className="rounded-xl border bg-white p-4"
-            style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
-          >
-            <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-              Sequences ทั้งหมด
-            </p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-              {totalSequences ?? 0}
-            </p>
-          </div>
-          <div
-            className="rounded-xl border bg-white p-4"
-            style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
-          >
-            <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-              กำลัง Active
-            </p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--color-success)" }}>
-              {activeSequences ?? 0}
-            </p>
-          </div>
         </div>
 
         <SequenceListClient

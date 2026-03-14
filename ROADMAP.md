@@ -153,6 +153,8 @@
 
 ### Lead Management UI (Next.js)
 - [x] หน้าค้นหา leads (search form + category presets + city presets + radius slider) — `leads/search/page.tsx` (รองรับ bulk select + checkbox + "บันทึก X leads")
+- [x] **Redesign Lead Search** — 2-panel layout (left form + right results), category/sub-category pills, AI Enrichment section, list/grid view toggle, export CSV, sticky bottom bar, avatar initials with color coding, lead temperature badge (ลีดร้อน/อุ่น/เย็น) — `leads/search/page.tsx`
+- [x] **Auto Email Enrichment** — หลัง Places API return ผล, ระบบ enrich email background แบบ concurrency 3, แสดง "กำลังค้นหาอีเมล..." per card, badge "AI กำลัง Enrich N รายการ" ใน header
 - [x] ตารางแสดง leads (sortable, filterable) — `leads/page.tsx` + `lead-list-client.tsx`
 - [x] Lead card: ชื่อ, คะแนน, อีเมล, เบอร์, ที่อยู่, เว็บ, สถานะ
 - [x] Bulk select + bulk delete (confirm dialog) + export CSV เฉพาะที่เลือก
@@ -262,8 +264,10 @@
 - [x] สร้าง Campaign form (template, domain, audience filter, schedule) — `campaigns/create/page.tsx`
 - [x] หน้า Sequences (list, active enrollments) — `sequences/page.tsx` + `sequence-list-client.tsx`
 - [x] Sequence builder (visual step editor + enrollments panel) — `sequences/[sequenceId]/page.tsx`
+- [x] Sequence builder redesign ตาม Paper design (2-column: visual timeline + right sidebar, StartNode/Connector/WaitPill/EmailStepNode, Stats 2x2 grid, Settings with toggles) — `sequences/[sequenceId]/page.tsx` (2026-03-14)
 - [x] Template library (grid cards + category filter) — `templates/page.tsx` + `template-list-client.tsx`
 - [x] Template editor (split-view HTML + live preview) — `templates/[templateId]/page.tsx`
+- [x] Template editor redesign ตาม Paper design (2-panel, breadcrumb header, variable pills, Desktop/Mobile preview toggle, email mock card) — `templates/[templateId]/page.tsx` (2026-03-14)
 - [x] Domain settings (DNS records + verify) — `settings/domains/page.tsx`
 - [ ] Unsubscribe list
 
@@ -492,6 +496,29 @@
 - [ ] Locale-aware date/number formatting
 - [ ] Email templates ทั้ง 2 ภาษา
 
+### AI Chat Assistant (Copilot)
+- [ ] Vercel AI SDK integration (`ai` package)
+- [ ] Chat API route (`/api/chat`) — Claude Haiku หรือ Gemini Flash
+- [ ] Floating chat widget component (bubble ล่างขวา)
+- [ ] Tool definitions เชื่อมกับระบบ:
+  - [ ] `searchLeads` — "หาลีดร้านกาแฟเชียงใหม่"
+  - [ ] `getLeadList` — "ดูลีดที่มี email ทั้งหมด"
+  - [ ] `enrichLeads` — "หา email ให้ลีด 10 ตัวล่าสุด"
+  - [ ] `createCampaign` — "สร้างแคมเปญส่ง email"
+  - [ ] `getStats` — "สรุปยอดลีดเดือนนี้"
+  - [ ] `sendTestEmail` — "ส่ง email ทดสอบ"
+- [ ] Conversation history (per user, Supabase storage)
+- [ ] Streaming response (real-time typing effect)
+- [ ] Context-aware — รู้ว่าอยู่หน้าไหน, workspace ไหน
+
+### Marketing Website (แยก Repo)
+- [ ] สร้าง repo ใหม่ `leadflow-website`
+- [ ] Tech: Next.js Static / Astro + Tailwind + MDX
+- [ ] หน้า: Hero, Features, Pricing, About, Contact, Blog, Docs
+- [ ] Domain: `leadflow.co` → marketing, `app.leadflow.co` → app
+- [ ] Analytics: Plausible หรือ PostHog
+- [ ] Deploy: Vercel
+
 ---
 
 ## สรุป Timeline
@@ -505,7 +532,7 @@
 | **4** | เชื่อม 2 ระบบ + Dashboard + Reports | 1 สัปดาห์ |
 | **5** | CRM (Contacts, Pipeline, Deals) | 2-3 สัปดาห์ |
 | **6** | SaaS Readiness (Billing, Limits, Admin, Security) | 2-3 สัปดาห์ |
-| **7** | Scale, Integrations, White-label, Public API | ongoing |
+| **7** | Scale, Integrations, White-label, Public API, AI Copilot, Marketing Site | ongoing |
 
 ---
 
@@ -560,6 +587,21 @@ Migration ใหม่: `supabase/migrations/20260312000030_phase4_integration.s
 - `apps/web/src/app/(dashboard)/[workspaceId]/leads/[leadId]/lead-detail-client.tsx` — เพิ่ม Email Activity section + ปุ่ม "Enroll in Sequence" เดี่ยว + Enroll dialog
 - `apps/web/src/components/sidebar.tsx` — เพิ่ม nav item "รายงาน" (BarChart3 icon)
 - `apps/web/src/server/routers/lead.ts` — เพิ่ม `lead.getEmailActivity` endpoint
+
+### Workspace Selection Page — Redesign (2026-03-14)
+ไฟล์อัพเดท:
+- `apps/web/src/app/(dashboard)/page.tsx` — Redesign ใหม่ทั้งหมดตาม Paper design:
+  - Full-page centered layout บน Canvas background (#F7F5F2)
+  - Logo: navy rounded-xl square + "LeadFlow" bold text
+  - Header: "เลือก Workspace" heading + subtitle
+  - Workspace cards (280px wide, white bg, rounded-2xl, border):
+    - Circle avatar 40px พร้อม initials (2 อักษร) บน navy background
+    - 3 stats แบบ grid cols-3 divide-x: ลีด / แคมเปญ / สมาชิก
+    - Stats ดึงจาก Supabase จริง (leads, campaigns, workspace_members) ด้วย `Promise.all`
+    - ปุ่ม "เข้าใช้งาน" navy filled button → navigate `/${workspaceId}`
+  - "สร้าง Workspace ใหม่" card: dashed border, centered Plus icon + text → `/onboarding`
+  - Footer: "ล็อกอินในฐานะ: {email} · ออกจากระบบ" (ออกจากระบบ = danger red)
+  - Responsive: flex-wrap บน mobile จะ stack แนวตั้ง
 
 ### Phase 4 — E2E Testing: Leads & Campaigns Pages (2026-03-13)
 ไฟล์อัพเดท:

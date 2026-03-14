@@ -16,10 +16,15 @@ import {
   ChevronRight,
   Play,
   Pause,
+  TrendingUp,
+  BarChart3,
+  Settings,
+  Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -80,15 +85,279 @@ interface Template {
 // Helpers
 // ============================================================
 
-const STATUS_CONFIG: Record<SequenceStatus, { label: string; color: string; bg: string }> = {
-  draft: { label: "Draft", color: "#7A6F68", bg: "#F5F0EB" },
-  active: { label: "Active", color: "#16A34A", bg: "#F0FDF4" },
-  paused: { label: "หยุดชั่วคราว", color: "#D97706", bg: "#FEF3C7" },
-  archived: { label: "Archived", color: "#7A6F68", bg: "#F5F0EB" },
+const STATUS_CONFIG: Record<SequenceStatus, { label: string; color: string; bg: string; dot: string }> = {
+  draft:    { label: "ร่าง",           color: "#7A6F68", bg: "#F5F0EB", dot: "#7A6F68" },
+  active:   { label: "กำลังทำงาน",    color: "#16A34A", bg: "#F0FDF4", dot: "#16A34A" },
+  paused:   { label: "หยุดชั่วคราว",  color: "#D97706", bg: "#FEF3C7", dot: "#D97706" },
+  archived: { label: "เก็บถาวร",      color: "#7A6F68", bg: "#F5F0EB", dot: "#7A6F68" },
 }
 
 // ============================================================
-// Component
+// Sub-components
+// ============================================================
+
+// Start node — trigger card
+function StartNode() {
+  return (
+    <div
+      className="relative flex items-start gap-4"
+    >
+      {/* Icon bubble */}
+      <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-white"
+        style={{ borderColor: "var(--color-border)" }}
+      >
+        <Zap className="h-4 w-4" style={{ color: "var(--color-muted)" }} />
+      </div>
+
+      {/* Card */}
+      <div
+        className="flex-1 rounded-xl border bg-white px-4 py-3 shadow-sm"
+        style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
+      >
+        <p className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+          เริ่มต้น: เพิ่มลีดเข้าลำดับ
+        </p>
+        <p className="mt-0.5 text-xs" style={{ color: "var(--color-muted)" }}>
+          Trigger · เมื่อลีดถูกเพิ่มเข้ามา
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Connector line + optional wait pill
+function Connector({ delayDays }: { delayDays?: number }) {
+  return (
+    <div className="relative ml-5 flex flex-col items-center">
+      {/* Top segment */}
+      <div className="h-4 w-0.5" style={{ backgroundColor: "var(--color-border)" }} />
+
+      {/* Wait pill — shown only when delay > 0 */}
+      {delayDays !== undefined && delayDays > 0 && (
+        <>
+          <div
+            className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium"
+            style={{
+              backgroundColor: "#FEF3C7",
+              borderColor: "#FDE68A",
+              color: "var(--color-warning)",
+            }}
+          >
+            <Clock className="h-3 w-3" />
+            รอ {delayDays} วัน
+          </div>
+          <div className="h-4 w-0.5" style={{ backgroundColor: "var(--color-border)" }} />
+        </>
+      )}
+
+      {/* Short segment when no delay pill */}
+      {(delayDays === undefined || delayDays === 0) && (
+        <div className="h-2 w-0.5" style={{ backgroundColor: "var(--color-border)" }} />
+      )}
+    </div>
+  )
+}
+
+// Email step node card
+function EmailStepNode({
+  step,
+  isFirst,
+  onDelete,
+}: {
+  step: SequenceStep
+  isFirst: boolean
+  onDelete: () => void
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      {/* Icon bubble */}
+      <div
+        className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2"
+        style={{
+          borderColor: "var(--color-primary)",
+          backgroundColor: "var(--color-primary-light)",
+        }}
+      >
+        <Mail className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
+      </div>
+
+      {/* Card */}
+      <div
+        className="flex-1 rounded-xl border bg-white px-4 py-3 shadow-sm"
+        style={{
+          borderColor: "var(--color-primary)",
+          borderRadius: "var(--radius-card)",
+        }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+              ส่งอีเมล: {step.email_templates?.name ?? "ไม่มี template"}
+            </p>
+            <p className="mt-0.5 truncate text-xs" style={{ color: "var(--color-muted)" }}>
+              {step.email_templates
+                ? `ใช้เทมเพลต '${step.email_templates.name}' · ${step.delay_days === 0 ? "ส่งทันที" : `ส่งหลัง ${step.delay_days} วัน`}`
+                : "—"}
+            </p>
+          </div>
+
+          {/* Right: open rate placeholder + delete */}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="text-right">
+              <p className="text-xs font-semibold" style={{ color: "var(--color-success)" }}>
+                —
+              </p>
+              <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                Open rate
+              </p>
+            </div>
+            <button
+              onClick={onDelete}
+              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-red-50"
+              style={{ color: "var(--color-danger)" }}
+              aria-label="ลบ step"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tags row */}
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+            style={{
+              backgroundColor: "var(--color-primary-light)",
+              color: "var(--color-primary)",
+              borderRadius: "var(--radius-badge)",
+            }}
+          >
+            <Mail className="h-2.5 w-2.5" />
+            อีเมล
+          </span>
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+            style={{
+              backgroundColor: isFirst ? "#F0FDF4" : "var(--color-subtle)",
+              color: isFirst ? "var(--color-success)" : "var(--color-muted)",
+              borderRadius: "var(--radius-badge)",
+            }}
+          >
+            <Clock className="h-2.5 w-2.5" />
+            {step.delay_days === 0 ? "ส่งทันที" : `หลัง ${step.delay_days} วัน`}
+          </span>
+          {step.condition && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+              style={{
+                backgroundColor: "var(--color-subtle)",
+                color: "var(--color-muted)",
+                borderRadius: "var(--radius-badge)",
+              }}
+            >
+              เงื่อนไข: {step.condition}
+            </span>
+          )}
+          <span
+            className="ml-auto text-xs font-medium"
+            style={{ color: "var(--color-muted)" }}
+          >
+            Step {step.step_order}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Add step dashed button
+function AddStepButton({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="flex items-center gap-4">
+      {/* Dot to align with icon column */}
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-dashed bg-white"
+        style={{ borderColor: "var(--color-border)" }}
+      >
+        <Plus className="h-4 w-4" style={{ color: "var(--color-muted)" }} />
+      </div>
+      <button
+        onClick={onClick}
+        className="flex-1 rounded-xl border-2 border-dashed px-4 py-3 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary-light/30"
+        style={{
+          borderColor: "var(--color-border)",
+          color: "var(--color-muted)",
+          borderRadius: "var(--radius-card)",
+        }}
+      >
+        + เพิ่ม Step
+      </button>
+    </div>
+  )
+}
+
+// Stat box
+function StatBox({
+  label,
+  value,
+  valueColor,
+}: {
+  label: string
+  value: string | number
+  valueColor?: string
+}) {
+  return (
+    <div
+      className="rounded-xl border bg-white p-3 text-center"
+      style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
+    >
+      <p
+        className="text-lg font-bold leading-none"
+        style={{ color: valueColor ?? "var(--color-ink)" }}
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-xs leading-tight" style={{ color: "var(--color-muted)" }}>
+        {label}
+      </p>
+    </div>
+  )
+}
+
+// Toggle row
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string
+  description?: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+          {label}
+        </p>
+        {description && (
+          <p className="mt-0.5 text-xs" style={{ color: "var(--color-muted)" }}>
+            {description}
+          </p>
+        )}
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+      />
+    </div>
+  )
+}
+
+// ============================================================
+// Main Page
 // ============================================================
 
 export default function SequenceBuilderPage() {
@@ -122,6 +391,14 @@ export default function SequenceBuilderPage() {
   const [deletingStepId, setDeletingStepId] = useState<string | null>(null)
   const [deleteStepOpen, setDeleteStepOpen] = useState(false)
   const [deletingStep, setDeletingStep] = useState(false)
+
+  // Settings state (placeholder — not yet connected to DB)
+  const [stopOnReply, setStopOnReply] = useState(true)
+  const [trackUnsubscribe, setTrackUnsubscribe] = useState(true)
+
+  // ============================================================
+  // Data fetching
+  // ============================================================
 
   const fetchSequence = useCallback(async () => {
     if (isNew) return
@@ -158,21 +435,20 @@ export default function SequenceBuilderPage() {
     }
   }, [workspaceId, sequenceId, enrollmentsPage, isNew])
 
-  useEffect(() => {
-    fetchSequence()
-  }, [fetchSequence])
+  useEffect(() => { fetchSequence() }, [fetchSequence])
+  useEffect(() => { fetchEnrollments() }, [fetchEnrollments])
 
-  useEffect(() => {
-    fetchEnrollments()
-  }, [fetchEnrollments])
-
-  // Load templates สำหรับ new sequence
+  // Load templates for new sequence
   useEffect(() => {
     if (!isNew) return
     trpc.template.list.query({ workspaceId, pageSize: 100 }).then((r) => {
       setTemplates(r.templates as unknown as Template[])
     })
   }, [workspaceId, isNew])
+
+  // ============================================================
+  // Handlers
+  // ============================================================
 
   const handleCreateNew = async () => {
     if (!newName.trim()) {
@@ -259,9 +535,9 @@ export default function SequenceBuilderPage() {
     }
   }
 
-  // =========================================================
+  // ============================================================
   // New sequence form
-  // =========================================================
+  // ============================================================
   if (isNew) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
@@ -279,7 +555,7 @@ export default function SequenceBuilderPage() {
           </div>
 
           <div
-            className="rounded-xl border bg-white p-6"
+            className="rounded-xl border bg-white p-6 shadow-sm"
             style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
           >
             <div className="space-y-4">
@@ -320,6 +596,9 @@ export default function SequenceBuilderPage() {
     )
   }
 
+  // ============================================================
+  // Loading / Error states
+  // ============================================================
   if (loading) {
     return (
       <div
@@ -352,57 +631,67 @@ export default function SequenceBuilderPage() {
 
   const statusCfg = STATUS_CONFIG[sequence.status]
 
+  // ============================================================
+  // Main UI
+  // ============================================================
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
-      <div className="px-8 py-8">
-        {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <Link href={`/${workspaceId}/sequences`}>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                กลับ
-              </Button>
+      <div className="px-6 py-6 lg:px-8 lg:py-8">
+
+        {/* ─── Header bar ──────────────────────────────────────── */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Left: breadcrumb + status */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={`/${workspaceId}/sequences`}
+              className="flex items-center gap-1 text-sm transition-colors hover:opacity-80"
+              style={{ color: "var(--color-muted)" }}
+            >
+              ลำดับอีเมล
             </Link>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-                  {sequence.name}
-                </h1>
-                <span
-                  className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
-                  style={{
-                    color: statusCfg.color,
-                    backgroundColor: statusCfg.bg,
-                    borderRadius: "var(--radius-badge)",
-                  }}
-                >
-                  {statusCfg.label}
-                </span>
-              </div>
-              <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-                {sequence.steps.length} steps — {sequence.activeEnrollments} active enrollments
-              </p>
-            </div>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-border)" }} />
+            <span
+              className="truncate text-sm font-semibold"
+              style={{ color: "var(--color-ink)" }}
+            >
+              {sequence.name}
+            </span>
+
+            {/* Status badge */}
+            <span
+              className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+              style={{
+                color: statusCfg.color,
+                backgroundColor: statusCfg.bg,
+                borderRadius: "var(--radius-badge)",
+              }}
+            >
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: statusCfg.dot }}
+              />
+              {statusCfg.label}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right: action buttons */}
+          <div className="flex shrink-0 items-center gap-2">
             {sequence.status !== "archived" && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleToggleStatus}
-                className="gap-2"
+                className="gap-1.5"
                 style={{ borderRadius: "var(--radius-btn)" }}
               >
                 {sequence.status === "active" ? (
                   <>
-                    <Pause className="h-4 w-4" />
+                    <Pause className="h-3.5 w-3.5" />
                     หยุด
                   </>
                 ) : (
                   <>
-                    <Play className="h-4 w-4" />
+                    <Play className="h-3.5 w-3.5" />
                     เปิดใช้งาน
                   </>
                 )}
@@ -411,185 +700,248 @@ export default function SequenceBuilderPage() {
             <Button
               size="sm"
               onClick={() => setAddStepOpen(true)}
-              className="gap-2"
+              className="gap-1.5"
               style={{
                 backgroundColor: "var(--color-primary)",
                 borderRadius: "var(--radius-btn)",
               }}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               เพิ่ม Step
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
-          {/* Step Builder — 2/3 */}
-          <div className="col-span-2">
+        {/* ─── 2-column layout ─────────────────────────────────── */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+
+          {/* ─── Center: Visual Timeline ──────────────────────── */}
+          <div className="flex-1 min-w-0">
             <div
-              className="rounded-xl border bg-white shadow-sm"
+              className="rounded-2xl border bg-white shadow-sm"
               style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
             >
+              {/* Panel header */}
               <div
-                className="border-b px-5 py-4"
+                className="flex items-center gap-2 border-b px-5 py-4"
                 style={{ borderColor: "var(--color-border)" }}
               >
+                <BarChart3 className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
                 <h2 className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
-                  Sequence Steps
+                  Timeline ลำดับ
                 </h2>
+                <span
+                  className="ml-auto rounded-full px-2 py-0.5 text-xs font-medium"
+                  style={{
+                    backgroundColor: "var(--color-primary-light)",
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  {sequence.steps.length} steps
+                </span>
               </div>
 
-              {sequence.steps.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-16">
-                  <div
-                    className="flex h-12 w-12 items-center justify-center rounded-full"
-                    style={{ backgroundColor: "var(--color-primary-light)" }}
-                  >
-                    <Mail className="h-6 w-6" style={{ color: "var(--color-primary)" }} />
-                  </div>
-                  <p className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
-                    ยังไม่มี steps
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={() => setAddStepOpen(true)}
-                    style={{
-                      backgroundColor: "var(--color-primary)",
-                      borderRadius: "var(--radius-btn)",
-                    }}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    เพิ่ม Step แรก
-                  </Button>
-                </div>
-              ) : (
-                <div className="px-5 py-4">
-                  {sequence.steps.map((step, idx) => (
-                    <div key={step.id} className="relative">
-                      {/* Connector line */}
-                      {idx < sequence.steps.length - 1 && (
-                        <div
-                          className="absolute left-5 top-14 h-8 w-0.5"
-                          style={{ backgroundColor: "var(--color-border)" }}
-                        />
-                      )}
+              <div className="px-5 py-6">
+                {/* ── Start node (always shown) ── */}
+                <StartNode />
 
-                      <div className="mb-2 flex items-start gap-4">
-                        {/* Step number */}
-                        <div
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                          style={{ backgroundColor: "var(--color-primary)" }}
-                        >
-                          {step.step_order}
-                        </div>
-
-                        {/* Step card */}
-                        <div
-                          className="flex-1 rounded-lg border p-4"
-                          style={{
-                            borderColor: "var(--color-border)",
-                            borderRadius: "var(--radius-card)",
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p
-                                className="text-sm font-semibold"
-                                style={{ color: "var(--color-ink)" }}
-                              >
-                                {step.email_templates?.name ?? "ไม่มี template"}
-                              </p>
-                              <p className="mt-0.5 text-xs" style={{ color: "var(--color-muted)" }}>
-                                {step.email_templates?.subject ?? "—"}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => {
-                                setDeletingStepId(step.id)
-                                setDeleteStepOpen(true)
-                              }}
-                              style={{ color: "var(--color-danger)" }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-
-                          <div className="mt-3 flex items-center gap-3">
-                            <div
-                              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-                              style={{
-                                backgroundColor: "var(--color-primary-light)",
-                                color: "var(--color-primary)",
-                                borderRadius: "var(--radius-badge)",
-                              }}
-                            >
-                              <Clock className="h-3 w-3" />
-                              {step.delay_days === 0
-                                ? "ส่งทันที"
-                                : `หลังจาก ${step.delay_days} วัน`}
-                            </div>
-                            {step.condition && (
-                              <span
-                                className="text-xs"
-                                style={{ color: "var(--color-muted)" }}
-                              >
-                                เงื่อนไข: {step.condition}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                {sequence.steps.length === 0 ? (
+                  /* Empty state */
+                  <>
+                    <Connector />
+                    <AddStepButton onClick={() => setAddStepOpen(true)} />
+                    <div className="mt-10 flex flex-col items-center gap-2 py-6 text-center">
+                      <div
+                        className="flex h-12 w-12 items-center justify-center rounded-full"
+                        style={{ backgroundColor: "var(--color-primary-light)" }}
+                      >
+                        <Mail className="h-6 w-6" style={{ color: "var(--color-primary)" }} />
                       </div>
+                      <p className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+                        ยังไม่มี steps
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                        กด "+ เพิ่ม Step" ด้านบนเพื่อเริ่มสร้างลำดับอีเมล
+                      </p>
                     </div>
-                  ))}
+                  </>
+                ) : (
+                  <>
+                    {sequence.steps.map((step, idx) => (
+                      <div key={step.id}>
+                        {/* Connector before each email step (from start or previous step) */}
+                        <Connector delayDays={step.delay_days} />
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAddStepOpen(true)}
-                    className="mt-3 w-full gap-2 border-dashed"
-                    style={{ borderRadius: "var(--radius-btn)" }}
-                  >
-                    <Plus className="h-4 w-4" />
-                    เพิ่ม Step
-                  </Button>
-                </div>
-              )}
+                        {/* Email step card */}
+                        <EmailStepNode
+                          step={step}
+                          isFirst={idx === 0}
+                          onDelete={() => {
+                            setDeletingStepId(step.id)
+                            setDeleteStepOpen(true)
+                          }}
+                        />
+                      </div>
+                    ))}
+
+                    {/* Connector + Add step button at bottom */}
+                    <Connector />
+                    <AddStepButton onClick={() => setAddStepOpen(true)} />
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Enrollments — 1/3 */}
-          <div>
+          {/* ─── Right Sidebar ────────────────────────────────── */}
+          <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col gap-4">
+
+            {/* Stats section */}
             <div
-              className="rounded-xl border bg-white shadow-sm"
+              className="rounded-2xl border bg-white shadow-sm"
+              style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
+            >
+              <div
+                className="flex items-center gap-2 border-b px-5 py-4"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <TrendingUp className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
+                <h2 className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                  สถิติลำดับ
+                </h2>
+              </div>
+
+              <div className="p-4">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <StatBox
+                    label="ผู้รับทั้งหมด"
+                    value={enrollmentsTotal > 0 ? enrollmentsTotal : "—"}
+                    valueColor="var(--color-ink)"
+                  />
+                  <StatBox
+                    label="เปิดอ่าน"
+                    value="—"
+                    valueColor="var(--color-success)"
+                  />
+                  <StatBox
+                    label="ตอบกลับ"
+                    value="—"
+                    valueColor="var(--color-primary)"
+                  />
+                  <StatBox
+                    label="ยกเลิก"
+                    value="—"
+                    valueColor="var(--color-danger)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Settings section */}
+            <div
+              className="rounded-2xl border bg-white shadow-sm"
+              style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
+            >
+              <div
+                className="flex items-center gap-2 border-b px-5 py-4"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <Settings className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
+                <h2 className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                  ตั้งค่า
+                </h2>
+              </div>
+
+              <div className="space-y-4 p-4">
+                {/* Sender name */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
+                    ชื่อผู้ส่ง
+                  </Label>
+                  <Input
+                    defaultValue="Thanakrit — LeadFlow"
+                    placeholder="ชื่อผู้ส่ง"
+                    style={{ borderRadius: "var(--radius-input)", fontSize: "13px" }}
+                  />
+                </div>
+
+                {/* Sender email */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
+                    อีเมลผู้ส่ง
+                  </Label>
+                  <Input
+                    defaultValue="thanakrit@leadflow.co"
+                    placeholder="email@domain.com"
+                    type="email"
+                    style={{ borderRadius: "var(--radius-input)", fontSize: "13px" }}
+                  />
+                </div>
+
+                {/* Send window */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
+                    ช่วงเวลาส่ง
+                  </Label>
+                  <Input
+                    defaultValue="จันทร์-ศุกร์ 09:00 - 17:00"
+                    placeholder="กำหนดช่วงเวลาส่ง"
+                    style={{ borderRadius: "var(--radius-input)", fontSize: "13px" }}
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-px" style={{ backgroundColor: "var(--color-border)" }} />
+
+                {/* Toggles */}
+                <div className="space-y-3">
+                  <ToggleRow
+                    label="หยุดเมื่อตอบกลับ"
+                    description="หยุดส่งอีเมลถัดไปทันทีที่ลีดตอบ"
+                    checked={stopOnReply}
+                    onCheckedChange={setStopOnReply}
+                  />
+                  <ToggleRow
+                    label="ติดตาม Unsubscribe"
+                    description="แนบลิงก์ยกเลิกทุกอีเมล"
+                    checked={trackUnsubscribe}
+                    onCheckedChange={setTrackUnsubscribe}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Enrollments section */}
+            <div
+              className="rounded-2xl border bg-white shadow-sm"
               style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
             >
               <div
                 className="flex items-center justify-between border-b px-5 py-4"
                 style={{ borderColor: "var(--color-border)" }}
               >
-                <h2 className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
-                  Enrollments
-                </h2>
-                <div
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                    ผู้รับ
+                  </h2>
+                </div>
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
                   style={{
                     backgroundColor: "var(--color-primary-light)",
                     color: "var(--color-primary)",
                   }}
                 >
-                  <Users className="h-3 w-3" />
                   {enrollmentsTotal}
-                </div>
+                </span>
               </div>
 
               {enrollments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-8">
-                  <Users className="h-8 w-8" style={{ color: "var(--color-muted)" }} />
+                  <Users className="h-8 w-8" style={{ color: "var(--color-border)" }} />
                   <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                    ยังไม่มี enrollments
+                    ยังไม่มีผู้รับ
                   </p>
                 </div>
               ) : (
@@ -597,10 +949,7 @@ export default function SequenceBuilderPage() {
                   {enrollments.map((enroll) => (
                     <div key={enroll.id} className="px-4 py-3">
                       {enroll.leads ? (
-                        <Link
-                          href={`/${workspaceId}/leads/${enroll.leads.id}`}
-                          className="block"
-                        >
+                        <Link href={`/${workspaceId}/leads/${enroll.leads.id}`} className="block">
                           <p
                             className="truncate text-sm font-medium hover:underline"
                             style={{ color: "var(--color-ink)" }}
@@ -616,24 +965,19 @@ export default function SequenceBuilderPage() {
                           —
                         </p>
                       )}
-                      <div className="mt-1 flex items-center justify-between">
-                        <span
-                          className="text-xs"
-                          style={{ color: "var(--color-muted)" }}
-                        >
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <span className="text-xs" style={{ color: "var(--color-muted)" }}>
                           Step {enroll.current_step}
                         </span>
                         <span
-                          className="inline-flex rounded px-1.5 py-0.5 text-xs font-medium"
+                          className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
                           style={{
-                            backgroundColor:
-                              enroll.status === "active" ? "#F0FDF4" : "#F5F0EB",
-                            color:
-                              enroll.status === "active" ? "#16A34A" : "#7A6F68",
+                            backgroundColor: enroll.status === "active" ? "#F0FDF4" : "#F5F0EB",
+                            color: enroll.status === "active" ? "#16A34A" : "#7A6F68",
                             borderRadius: "var(--radius-badge)",
                           }}
                         >
-                          {enroll.status}
+                          {enroll.status === "active" ? "กำลังส่ง" : enroll.status}
                         </span>
                       </div>
                     </div>
@@ -641,7 +985,7 @@ export default function SequenceBuilderPage() {
                 </div>
               )}
 
-              {/* Enrollments Pagination */}
+              {/* Enrollments pagination */}
               {enrollmentsTotalPages > 1 && (
                 <div
                   className="flex items-center justify-center gap-2 border-t px-4 py-3"
@@ -657,7 +1001,7 @@ export default function SequenceBuilderPage() {
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </Button>
                   <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-                    {enrollmentsPage}/{enrollmentsTotalPages}
+                    {enrollmentsPage} / {enrollmentsTotalPages}
                   </span>
                   <Button
                     variant="outline"
@@ -675,7 +1019,7 @@ export default function SequenceBuilderPage() {
         </div>
       </div>
 
-      {/* Add Step Dialog */}
+      {/* ─── Add Step Dialog ─────────────────────────────────── */}
       <Dialog open={addStepOpen} onOpenChange={setAddStepOpen}>
         <DialogContent style={{ borderRadius: "var(--radius-modal)" }}>
           <DialogHeader>
@@ -754,13 +1098,13 @@ export default function SequenceBuilderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Step Dialog */}
+      {/* ─── Delete Step Dialog ──────────────────────────────── */}
       <Dialog open={deleteStepOpen} onOpenChange={setDeleteStepOpen}>
         <DialogContent style={{ borderRadius: "var(--radius-modal)" }}>
           <DialogHeader>
             <DialogTitle style={{ color: "var(--color-ink)" }}>ลบ Step</DialogTitle>
             <DialogDescription style={{ color: "var(--color-muted)" }}>
-              คุณต้องการลบ step นี้ใช่หรือไม่?
+              คุณต้องการลบ step นี้ใช่หรือไม่? การลบไม่สามารถยกเลิกได้
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -774,7 +1118,10 @@ export default function SequenceBuilderPage() {
             <Button
               onClick={handleDeleteStep}
               disabled={deletingStep}
-              style={{ backgroundColor: "var(--color-danger)", borderRadius: "var(--radius-btn)" }}
+              style={{
+                backgroundColor: "var(--color-danger)",
+                borderRadius: "var(--radius-btn)",
+              }}
             >
               {deletingStep ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
