@@ -72,36 +72,36 @@ cd apps/web && npm run dev
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 2.1.1 | สมัครสำเร็จ | ใส่ email + password (8+ ตัว) → กด Sign Up | redirect ไปหน้า onboarding หรือ email confirmation | ☐ |
-| 2.1.2 | Email ซ้ำ | ใส่ email ที่สมัครแล้ว → กด Sign Up | แสดง error "Email นี้ถูกใช้แล้ว" | ☐ |
-| 2.1.3 | Password สั้น | ใส่ password < 8 ตัว → กด Sign Up | แสดง validation error | ☐ |
-| 2.1.4 | Email ไม่ถูกรูปแบบ | ใส่ "not-an-email" → กด Sign Up | แสดง validation error | ☐ |
-| 2.1.5 | ช่องว่าง | ไม่ใส่ email หรือ password → กด Sign Up | ปุ่ม disabled หรือ error | ☐ |
+| 2.1.1 | สมัครสำเร็จ | ใส่ email + password (8+ ตัว) → กด Sign Up | redirect ไปหน้า onboarding หรือ email confirmation | ✅ |
+| 2.1.2 | Email ซ้ำ | ใส่ email ที่สมัครแล้ว → กด Sign Up | แสดง error "Email นี้ถูกใช้แล้ว" | ✅ | ข้อนี้ถ้าอีเมลซ้ำกัน มันจะเด้งไปให้ล็อกอินใช่ไหม
+| 2.1.3 | Password สั้น | ใส่ password < 8 ตัว → กด Sign Up | แสดง validation error | ✅ |
+| 2.1.4 | Email ไม่ถูกรูปแบบ | ใส่ "not-an-email" → กด Sign Up | แสดง validation error | ✅ |
+| 2.1.5 | ช่องว่าง | ไม่ใส่ email หรือ password → กด Sign Up | ปุ่ม disabled หรือ error | ✅ |
 
 ### 2.2 เข้าสู่ระบบ (Login)
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 2.2.1 | Login สำเร็จ | ใส่ email + password ที่ถูกต้อง | redirect ไป dashboard หรือ workspace selection | ☐ |
-| 2.2.2 | Password ผิด | ใส่ email ถูก + password ผิด | แสดง error "Invalid credentials" | ☐ |
-| 2.2.3 | Email ไม่มีในระบบ | ใส่ email ที่ยังไม่สมัคร | แสดง error | ☐ |
-| 2.2.4 | Session persist | Login → ปิด tab → เปิดใหม่ | ยังอยู่ในระบบ (ไม่ต้อง login ใหม่) | ☐ |
+| 2.2.1 | Login สำเร็จ | ใส่ email + password ที่ถูกต้อง | redirect ไป dashboard หรือ workspace selection | ✅ |
+| 2.2.2 | Password ผิด | ใส่ email ถูก + password ผิด | แสดง error "Invalid credentials" | ✅ |
+| 2.2.3 | Email ไม่มีในระบบ | ใส่ email ที่ยังไม่สมัคร | แสดง error | ✅ |
+| 2.2.4 | Session persist | Login → ปิด tab → เปิดใหม่ | ยังอยู่ในระบบ (ไม่ต้อง login ใหม่) | ✅ |
 
 ### 2.3 Onboarding (สร้าง Agency)
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 2.3.1 | สร้าง Agency สำเร็จ | ใส่ชื่อ "My Agency" + slug "my-agency" | สร้าง agency + default workspace → redirect ไป dashboard | ☐ |
-| 2.3.2 | Slug ซ้ำ | ใส่ slug ที่มีคนใช้แล้ว | error "Slug ถูกใช้แล้ว" | ☐ |
-| 2.3.3 | Slug ไม่ถูกรูปแบบ | ใส่ slug มี space หรือ uppercase | error หรือ auto-format เป็น lowercase | ☐ |
-| 2.3.4 | Slug สั้นเกิน | ใส่ slug < 3 ตัวอักษร | validation error | ☐ |
+| 2.3.1 | สร้าง Agency สำเร็จ | ใส่ชื่อ "My Agency" + slug "my-agency" | สร้าง agency + default workspace → redirect ไป dashboard | ✅ |
+| 2.3.2 | Slug ซ้ำ | ใส่ slug ที่มีคนใช้แล้ว | error "Slug ถูกใช้แล้ว" | ✅ | ตอนนี้แก้เป็นเพิ่มตัวเลขให้ uniqueแล้ว
+| 2.3.3 | Slug ไม่ถูกรูปแบบ | ใส่ slug มี space หรือ uppercase | error หรือ auto-format เป็น lowercase | ✅ |
+| 2.3.4 | Slug สั้นเกิน | ใส่ slug < 3 ตัวอักษร | validation error | ✅ |
 
 ### 2.4 Logout
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 2.4.1 | Logout สำเร็จ | กดปุ่ม Logout | redirect ไป /login, session ถูกล้าง | ☐ |
-| 2.4.2 | หลัง logout เข้าถึง dashboard | Logout → พิมพ์ URL dashboard ตรงๆ | redirect กลับ /login | ☐ |
+| 2.4.1 | Logout สำเร็จ | กดปุ่ม Logout | redirect ไป /login, session ถูกล้าง | ✅ |
+| 2.4.2 | หลัง logout เข้าถึง dashboard | Logout → พิมพ์ URL dashboard ตรงๆ | redirect กลับ /login | ✅ |
 
 ---
 
@@ -111,14 +111,14 @@ cd apps/web && npm run dev
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 3.1.1 | ดูโปรไฟล์ตัวเอง | ไปหน้า Settings > Profile | แสดง email, ชื่อ, avatar | ☐ |
+| 3.1.1 | ดูโปรไฟล์ตัวเอง | ไปหน้า Settings > Profile | แสดง email, ชื่อ, avatar | ✅ |
 
 ### 3.2 แก้ไขโปรไฟล์
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 3.2.1 | แก้ชื่อ | เปลี่ยน full_name → กด Save | ชื่อเปลี่ยนสำเร็จ, แสดงชื่อใหม่ | ☐ |
-| 3.2.2 | ชื่อว่าง | ลบชื่อให้ว่าง → กด Save | validation error | ☐ |
+| 3.2.1 | แก้ชื่อ | เปลี่ยน full_name → กด Save | ชื่อเปลี่ยนสำเร็จ, แสดงชื่อใหม่ | ✅ |
+| 3.2.2 | ชื่อว่าง | ลบชื่อให้ว่าง → กด Save | validation error | Best Solutions |
 
 ---
 
@@ -128,18 +128,18 @@ cd apps/web && npm run dev
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 4.1.1 | ดู workspace list | ไปหน้า workspace selection | แสดง workspace ทั้งหมดที่เป็น member | ☐ |
-| 4.1.2 | สร้าง workspace ใหม่ | กด "สร้าง Workspace" → ใส่ชื่อ + type | สร้างสำเร็จ, แสดงใน list | ☐ |
-| 4.1.3 | เข้า workspace | กดเลือก workspace | เข้า dashboard ของ workspace นั้น | ☐ |
-| 4.1.4 | แก้ชื่อ workspace | Settings > Workspace → แก้ชื่อ | ชื่อเปลี่ยน, sidebar แสดงชื่อใหม่ | ☐ |
-| 4.1.5 | ลบ workspace (client type) | Settings > ลบ workspace ที่เป็น type "client" | ลบสำเร็จ | ☐ |
-| 4.1.6 | ลบ default workspace | พยายามลบ workspace แรก (type: agency) | error "ไม่สามารถลบ default workspace" | ☐ |
+| 4.1.1 | ดู workspace list | ไปหน้า workspace selection | แสดง workspace ทั้งหมดที่เป็น member | ✅ |
+| 4.1.2 | สร้าง workspace ใหม่ | กด "สร้าง Workspace" → ใส่ชื่อ + type | สร้างสำเร็จ, แสดงใน list | ✅ |
+| 4.1.3 | เข้า workspace | กดเลือก workspace | เข้า dashboard ของ workspace นั้น | ✅ |
+| 4.1.4 | แก้ชื่อ workspace | Settings > Workspace → แก้ชื่อ | ชื่อเปลี่ยน, sidebar แสดงชื่อใหม่ | ✅ |
+| 4.1.5 | ลบ workspace (client type) | Settings > ลบ workspace ที่เป็น type "client" | ลบสำเร็จ | ✅ |
+| 4.1.6 | ลบ default workspace | พยายามลบ workspace แรก (type: agency) | error "ไม่สามารถลบ default workspace" | ✅ |
 
 ### 4.2 Members
 
 | # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
 |---|--------|--------|-------------|-------|
-| 4.2.1 | ดู members | Settings > Members | แสดงรายชื่อ + role ทั้งหมด | ☐ |
+| 4.2.1 | ดู members | Settings > Members | แสดงรายชื่อ + role ทั้งหมด | ✅ |
 | 4.2.2 | เชิญ member ใหม่ | กด "เชิญ" → ใส่ email → เลือก role | เพิ่ม member (pending ถ้ายังไม่มี account) | ☐ |
 | 4.2.3 | เชิญ email ซ้ำ | เชิญ email ที่เชิญไปแล้ว | error "ได้รับเชิญแล้ว" | ☐ |
 | 4.2.4 | เปลี่ยน role | Admin เปลี่ยน role ของ member | role เปลี่ยนสำเร็จ | ☐ |
@@ -552,6 +552,45 @@ curl -X POST http://localhost:3000/api/webhooks/resend \
 | 13.3.1 | เข้า dashboard ไม่ login | พิมพ์ URL dashboard ตรงๆ (ไม่ login) | redirect ไป /login | ☐ |
 | 13.3.2 | API call ไม่มี token | ใช้ curl เรียก tRPC endpoint ไม่มี header | error 401 | ☐ |
 | 13.3.3 | Token หมดอายุ | ปล่อยให้ session expire → พยายามใช้งาน | redirect ไป /login หรือ refresh token | ☐ |
+
+---
+
+## 13.5 UI Redesign Verification (2026-03-14)
+
+> ตรวจสอบ UI ใหม่ที่ redesign ตาม Paper design
+
+### 13.5.1 หน้าที่ redesign ใหม่
+
+| # | หน้า | ตรวจสอบ | Pass? |
+|---|------|---------|-------|
+| 1 | Login | Split screen: ซ้ายน้ำเงิน (logo+tagline) / ขวาขาว (form+Google OAuth) | ☐ |
+| 2 | Workspace Selection | Cards + stats (leads/campaigns/members) + "สร้าง Workspace ใหม่" | ☐ |
+| 3 | Sidebar | White theme, 3 กลุ่ม (ทั่วไป/เครื่องมือ/สนับสนุน), active state ไม่ซ้อนกัน | ☐ |
+| 4 | Lead Search | 2-panel, auto email enrich, sub-categories multi-select, province dropdown | ☐ |
+| 5 | Lead List | Filter pills + แยกคอลัมน์อีเมล/เบอร์ + bulk หา email | ☐ |
+| 6 | Lead Detail | 3-column layout, AI score card, Google Places stats, activity timeline | ☐ |
+| 7 | Template List | Card grid, category badges+filter, three-dot menu, stats | ☐ |
+| 8 | Template Editor | 2-panel split, variable pills insert, Desktop/Mobile preview toggle | ☐ |
+| 9 | Sequence List | Row cards, status badges, stats (ผู้รับ/Open/Reply), "แก้ไข" button | ☐ |
+| 10 | Sequence Builder | Visual timeline (connector lines, wait pills), right sidebar (stats+settings) | ☐ |
+| 11 | Campaign List | Table rows, avatar icons, status badges, pagination, filters | ☐ |
+| 12 | Campaign Detail | 5 stat cards, progress bar, right sidebar, recipients table | ☐ |
+| 13 | Create Campaign | Step indicator, 2-column, template sidebar, audience filter, day-of-week | ☐ |
+
+### 13.5.2 Social Media Finder
+
+| # | ทดสอบ | วิธีทำ | ผลที่คาดหวัง | Pass? |
+|---|--------|--------|-------------|-------|
+| 1 | หา Facebook Page | ค้นหา lead → ติ๊ก "ค้นหาโซเชียลมีเดีย" → ค้นหา | พบ FB link แสดง icon สีน้ำเงิน | ☐ |
+| 2 | หา LINE OA | เว็บที่มี LINE link → ค้นหา | พบ LINE handle แสดง icon สีเขียว | ☐ |
+| 3 | เว็บไม่มี social | เว็บที่ไม่มี FB/LINE → ค้นหา | ไม่แสดง icon, ไม่ crash | ☐ |
+| 4 | API direct test | `POST /api/v1/social/find` + website | คืน facebook/line objects | ☐ |
+
+### 13.5.3 Coming Soon Pages
+
+| # | หน้า | URL | ตรวจสอบ | Pass? |
+|---|------|-----|---------|-------|
+| 1 | ช่วยเหลือ | /{workspaceId}/help | แสดง Coming Soon + ปุ่มกลับ | ☐ |
 
 ---
 

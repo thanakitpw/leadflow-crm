@@ -261,6 +261,7 @@
 ### Email Management UI (Next.js)
 - [x] หน้า Campaigns (list, status, stats) — `campaigns/page.tsx` + `campaign-list-client.tsx`
 - [x] Campaign detail: sent / open rate / click rate / bounce rate + contacts table — `campaigns/[campaignId]/page.tsx`
+- [x] Campaign detail redesign ตาม Paper design (breadcrumb header, 5 stat cards, progress bar, 2-column layout, right sidebar: ข้อมูลแคมเปญ + ตัวอย่างอีเมล + กำหนดการส่ง, recipients table with status filter + Export, status badges) — `campaigns/[campaignId]/page.tsx` (2026-03-14)
 - [x] สร้าง Campaign form (template, domain, audience filter, schedule) — `campaigns/create/page.tsx`
 - [x] หน้า Sequences (list, active enrollments) — `sequences/page.tsx` + `sequence-list-client.tsx`
 - [x] Sequence builder (visual step editor + enrollments panel) — `sequences/[sequenceId]/page.tsx`

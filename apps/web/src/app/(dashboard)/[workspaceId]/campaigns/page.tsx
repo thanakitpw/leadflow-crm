@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Plus } from "lucide-react"
+import { Plus, List } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import CampaignListClient from "./campaign-list-client"
 
@@ -32,23 +32,32 @@ export default async function CampaignsPage({ params, searchParams }: PageProps)
 
   const canEdit = ["agency_admin", "agency_member"].includes(membership.role)
 
-  // สถิติ campaigns
+  // นับจำนวน campaigns ทั้งหมด
   const { count: totalCampaigns } = await supabase
     .from("campaigns")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
 
-  const { count: activeCampaigns } = await supabase
+  // หาเวลาอัพเดตล่าสุด
+  const { data: latestCampaign } = await supabase
     .from("campaigns")
-    .select("id", { count: "exact", head: true })
+    .select("updated_at")
     .eq("workspace_id", workspaceId)
-    .in("status", ["sending", "scheduled"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-  const { count: draftCampaigns } = await supabase
-    .from("campaigns")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId)
-    .eq("status", "draft")
+  const lastUpdated = latestCampaign?.updated_at
+    ? (() => {
+        const diffMs = Date.now() - new Date(latestCampaign.updated_at).getTime()
+        const diffMins = Math.floor(diffMs / 60000)
+        if (diffMins < 1) return "เมื่อกี้"
+        if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`
+        const diffHrs = Math.floor(diffMins / 60)
+        if (diffHrs < 24) return `${diffHrs} ชั่วโมงที่แล้ว`
+        return `${Math.floor(diffHrs / 24)} วันที่แล้ว`
+      })()
+    : null
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
@@ -56,62 +65,44 @@ export default async function CampaignsPage({ params, searchParams }: PageProps)
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-              Campaigns
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: "var(--color-ink)", letterSpacing: "-0.01em" }}
+            >
+              แคมเปญอีเมล
             </h1>
             <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-              จัดการแคมเปญอีเมลและติดตามผลการส่ง
+              {totalCampaigns ?? 0} แคมเปญ
+              {lastUpdated ? ` · อัพเดตล่าสุด ${lastUpdated}` : ""}
             </p>
           </div>
-          {canEdit && (
-            <Link href={`/${workspaceId}/campaigns/create`}>
+          <div className="flex items-center gap-3">
+            <Link href={`/${workspaceId}/sequences`}>
               <Button
+                variant="outline"
                 style={{
-                  backgroundColor: "var(--color-primary)",
                   borderRadius: "var(--radius-btn)",
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-ink)",
                 }}
               >
-                <Plus className="mr-2 h-4 w-4" />
-                สร้าง Campaign
+                <List className="mr-2 h-4 w-4" />
+                ลำดับอีเมล
               </Button>
             </Link>
-          )}
-        </div>
-
-        {/* Stats Bar */}
-        <div className="mb-6 grid grid-cols-3 gap-4">
-          <div
-            className="rounded-xl border bg-white p-4"
-            style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
-          >
-            <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-              Campaigns ทั้งหมด
-            </p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--color-ink)" }}>
-              {totalCampaigns ?? 0}
-            </p>
-          </div>
-          <div
-            className="rounded-xl border bg-white p-4"
-            style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
-          >
-            <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-              กำลังส่ง / กำหนดเวลา
-            </p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--color-success)" }}>
-              {activeCampaigns ?? 0}
-            </p>
-          </div>
-          <div
-            className="rounded-xl border bg-white p-4"
-            style={{ borderColor: "var(--color-border)", borderRadius: "var(--radius-card)" }}
-          >
-            <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-              Draft
-            </p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--color-warning)" }}>
-              {draftCampaigns ?? 0}
-            </p>
+            {canEdit && (
+              <Link href={`/${workspaceId}/campaigns/create`}>
+                <Button
+                  style={{
+                    backgroundColor: "var(--color-primary)",
+                    borderRadius: "var(--radius-btn)",
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  สร้างแคมเปญ
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
 
