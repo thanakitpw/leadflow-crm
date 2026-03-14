@@ -1,9 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Building2, Users, Plus, ChevronRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Plus } from "lucide-react"
 
 type WorkspaceMember = {
   role: string
@@ -11,17 +9,67 @@ type WorkspaceMember = {
     id: string
     name: string
     type: string
+    agency: {
+      type: string
+    } | null
     workspace_members: { count: number }[]
   }
 }
 
+type WorkspaceStats = {
+  leadCount: number
+  campaignCount: number
+  memberCount: number
+}
+
+async function getWorkspaceStats(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string
+): Promise<WorkspaceStats> {
+  const [leadsResult, campaignsResult, membersResult] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
+    supabase
+      .from("campaigns")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
+    supabase
+      .from("workspace_members")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
+  ])
+
+  return {
+    leadCount: leadsResult.count ?? 0,
+    campaignCount: campaignsResult.count ?? 0,
+    memberCount: membersResult.count ?? 0,
+  }
+}
+
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/)
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
+
+const agencyTypeLabel: Record<string, string> = {
+  agency: "Agency",
+  freelance: "Freelancer",
+  inhouse: "In-house",
+}
+
 export default async function WorkspaceSelectionPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) redirect("/login")
 
-  // ดึง workspaces ที่ user เป็น member
   const { data: memberships } = await supabase
     .from("workspace_members")
     .select(`
@@ -30,147 +78,234 @@ export default async function WorkspaceSelectionPage() {
         id,
         name,
         type,
+        agency:agencies (type),
         workspace_members (count)
       )
     `)
     .eq("user_id", user.id)
 
-  const workspaces = (memberships as unknown as WorkspaceMember[] | null)?.filter(m => m.workspace) ?? []
+  const workspaces = (
+    memberships as unknown as WorkspaceMember[] | null
+  )?.filter((m) => m.workspace) ?? []
 
-  // ถ้าไม่มี workspace เลย → ไป onboarding
   if (workspaces.length === 0) {
     redirect("/onboarding")
   }
 
-  const roleLabel: Record<string, string> = {
-    agency_admin: "Admin",
-    agency_member: "Member",
-    client_viewer: "Viewer",
-  }
-
-  const typeLabel: Record<string, string> = {
-    agency: "Agency",
-    client: "Client",
-  }
+  // ดึง stats สำหรับทุก workspace พร้อมกัน
+  const statsMap = await Promise.all(
+    workspaces.map(async ({ workspace }) => {
+      const stats = await getWorkspaceStats(supabase, workspace.id)
+      return { workspaceId: workspace.id, stats }
+    })
+  )
+  const statsById = Object.fromEntries(
+    statsMap.map(({ workspaceId, stats }) => [workspaceId, stats])
+  )
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 py-12">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <span
-            className="mb-4 block text-3xl font-extrabold tracking-tight"
-            style={{ color: "var(--color-primary)" }}
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-16"
+      style={{ backgroundColor: "var(--color-canvas)" }}
+    >
+      {/* Header */}
+      <div className="mb-10 flex flex-col items-center gap-3 text-center">
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-xl"
+            style={{ backgroundColor: "var(--color-primary)" }}
           >
-            LeadFlow
-          </span>
-          <h1
+            <span
+              className="text-lg font-extrabold leading-none text-white"
+            >
+              L
+            </span>
+          </div>
+          <span
             className="text-2xl font-bold"
             style={{ color: "var(--color-ink)" }}
           >
+            LeadFlow
+          </span>
+        </div>
+
+        {/* Title */}
+        <div className="mt-2">
+          <h1
+            className="text-2xl font-bold tracking-tight"
+            style={{ color: "var(--color-ink)", letterSpacing: "-0.01em" }}
+          >
             เลือก Workspace
           </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-            คุณเป็นสมาชิกของ {workspaces.length} workspace
+          <p
+            className="mt-1.5 text-sm"
+            style={{ color: "var(--color-muted)" }}
+          >
+            เลือก workspace ที่คุณต้องการเข้าใช้งาน
           </p>
         </div>
+      </div>
 
-        {/* Workspace List */}
-        <div className="space-y-3">
-          {workspaces.map(({ role, workspace }) => {
-            const memberCount = workspace.workspace_members[0]?.count ?? 0
+      {/* Cards Grid */}
+      <div className="flex w-full max-w-5xl flex-wrap justify-center gap-6">
+        {workspaces.map(({ workspace }) => {
+          const stats = statsById[workspace.id]
+          const aType =
+            (workspace.agency as { type: string } | null)?.type ?? "agency"
+          const initials = getInitials(workspace.name)
+          const typeLabel = agencyTypeLabel[aType] ?? aType
 
-            return (
-              <Link key={workspace.id} href={`/${workspace.id}`}>
-                <Card
-                  className="group cursor-pointer border-border transition-all hover:border-primary/40 hover:shadow-sm"
-                  style={{ borderRadius: "var(--radius-card)" }}
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    {/* Icon */}
-                    <div
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: "var(--color-primary-light)" }}
-                    >
-                      <Building2
-                        className="h-5 w-5"
-                        style={{ color: "var(--color-primary)" }}
-                      />
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h2
-                          className="truncate text-sm font-semibold"
-                          style={{ color: "var(--color-ink)" }}
-                        >
-                          {workspace.name}
-                        </h2>
-                        <span
-                          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                          style={{
-                            backgroundColor: "var(--color-primary-light)",
-                            color: "var(--color-primary)",
-                            borderRadius: "var(--radius-badge)",
-                          }}
-                        >
-                          {typeLabel[workspace.type] ?? workspace.type}
-                        </span>
-                      </div>
-                      <div
-                        className="mt-0.5 flex items-center gap-1 text-xs"
-                        style={{ color: "var(--color-muted)" }}
-                      >
-                        <Users className="h-3 w-3" />
-                        <span>{memberCount} สมาชิก</span>
-                        <span className="mx-1.5">·</span>
-                        <span>{roleLabel[role] ?? role}</span>
-                      </div>
-                    </div>
-
-                    {/* Arrow */}
-                    <ChevronRight
-                      className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
-                      style={{ color: "var(--color-muted)" }}
-                    />
-                  </div>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
-
-        {/* New Workspace Button */}
-        <div className="mt-4">
-          <Link href="/onboarding">
-            <Button
-              variant="outline"
-              className="w-full h-10 gap-2 border-dashed text-sm font-medium"
+          return (
+            <div
+              key={workspace.id}
+              className="flex flex-col"
               style={{
-                borderColor: "var(--color-border)",
-                color: "var(--color-muted)",
-                borderRadius: "var(--radius-btn)",
+                width: "280px",
+                backgroundColor: "#FFFFFF",
+                borderRadius: "16px",
+                border: "1.5px solid var(--color-border)",
+                padding: "24px",
+                gap: "20px",
               }}
             >
-              <Plus className="h-4 w-4" />
-              สร้าง Workspace ใหม่
-            </Button>
-          </Link>
-        </div>
+              {/* Card Top: Avatar + Name + Type */}
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                  style={{ backgroundColor: "var(--color-primary)" }}
+                >
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-sm font-bold leading-tight"
+                    style={{ color: "var(--color-ink)" }}
+                  >
+                    {workspace.name}
+                  </p>
+                  <p
+                    className="mt-0.5 text-xs"
+                    style={{ color: "var(--color-muted)" }}
+                  >
+                    {typeLabel}
+                  </p>
+                </div>
+              </div>
 
-        {/* Sign out */}
-        <p className="mt-6 text-center text-xs" style={{ color: "var(--color-muted)" }}>
-          ลงชื่อเข้าในฐานะ {user.email} ·{" "}
-          <Link
-            href="/api/auth/signout"
-            className="hover:underline"
-            style={{ color: "var(--color-primary)" }}
+              {/* Stats Row */}
+              <div
+                className="grid grid-cols-3 divide-x"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <div className="flex flex-col items-center gap-0.5 pr-3">
+                  <span
+                    className="text-xl font-bold leading-tight tabular-nums"
+                    style={{ color: "var(--color-ink)" }}
+                  >
+                    {stats?.leadCount ?? "—"}
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: "var(--color-muted)" }}
+                  >
+                    ลีด
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5 px-3">
+                  <span
+                    className="text-xl font-bold leading-tight tabular-nums"
+                    style={{ color: "var(--color-ink)" }}
+                  >
+                    {stats?.campaignCount ?? "—"}
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: "var(--color-muted)" }}
+                  >
+                    แคมเปญ
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5 pl-3">
+                  <span
+                    className="text-xl font-bold leading-tight tabular-nums"
+                    style={{ color: "var(--color-ink)" }}
+                  >
+                    {stats?.memberCount ?? "—"}
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: "var(--color-muted)" }}
+                  >
+                    สมาชิก
+                  </span>
+                </div>
+              </div>
+
+              {/* CTA Button */}
+              <Link href={`/${workspace.id}`} className="block">
+                <button
+                  className="w-full cursor-pointer py-2.5 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+                  style={{
+                    backgroundColor: "var(--color-primary)",
+                    color: "#FFFFFF",
+                    borderRadius: "var(--radius-btn)",
+                    border: "none",
+                  }}
+                >
+                  เข้าใช้งาน
+                </button>
+              </Link>
+            </div>
+          )
+        })}
+
+        {/* Create New Workspace Card */}
+        <Link href="/onboarding" className="block" style={{ width: "280px" }}>
+          <div
+            className="flex h-full flex-col items-center justify-center gap-3 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+            style={{
+              minHeight: "220px",
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              border: "1.5px dashed var(--color-border)",
+              padding: "24px",
+              cursor: "pointer",
+            }}
           >
-            ออกจากระบบ
-          </Link>
-        </p>
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-full"
+              style={{ backgroundColor: "var(--color-canvas)" }}
+            >
+              <Plus
+                className="h-5 w-5"
+                style={{ color: "var(--color-muted)" }}
+              />
+            </div>
+            <p
+              className="text-sm font-semibold"
+              style={{ color: "var(--color-muted)" }}
+            >
+              สร้าง Workspace ใหม่
+            </p>
+          </div>
+        </Link>
       </div>
+
+      {/* Footer */}
+      <p
+        className="mt-10 text-center text-xs"
+        style={{ color: "var(--color-muted)" }}
+      >
+        ล็อกอินในฐานะ: {user.email} ·{" "}
+        <Link
+          href="/api/auth/signout"
+          className="hover:underline"
+          style={{ color: "var(--color-danger)" }}
+        >
+          ออกจากระบบ
+        </Link>
+      </p>
     </div>
   )
 }

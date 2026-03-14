@@ -5,17 +5,18 @@ import { usePathname } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import {
   LayoutDashboard,
+  Search,
   Users,
   MailOpen,
   FileText,
   GitBranch,
   Settings,
+  HelpCircle,
   LogOut,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Building2,
-  BarChart3,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -31,54 +32,80 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { canAccessSettings } from "@/lib/permissions"
 
 const STORAGE_KEY = "sidebar-collapsed"
+
 
 interface NavItem {
   href: string
   label: string
   icon: React.ElementType
   requiresRole?: string[]
+  badge?: React.ReactNode
 }
 
-function getNavItems(workspaceId: string): NavItem[] {
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+function getNavSections(workspaceId: string): NavSection[] {
   return [
     {
-      href: `/${workspaceId}`,
-      label: "แดชบอร์ด",
-      icon: LayoutDashboard,
+      title: "ทั่วไป",
+      items: [
+        {
+          href: `/${workspaceId}`,
+          label: "แดชบอร์ด",
+          icon: LayoutDashboard,
+        },
+        {
+          href: `/${workspaceId}/leads/search`,
+          label: "ค้นหาลีด",
+          icon: Search,
+        },
+        {
+          href: `/${workspaceId}/leads`,
+          label: "ลีด",
+          icon: Users,
+        },
+        {
+          href: `/${workspaceId}/campaigns`,
+          label: "แคมเปญ",
+          icon: MailOpen,
+        },
+      ],
     },
     {
-      href: `/${workspaceId}/leads`,
-      label: "รายชื่อลีด",
-      icon: Users,
+      title: "เครื่องมือ",
+      items: [
+        {
+          href: `/${workspaceId}/templates`,
+          label: "เทมเพลต",
+          icon: FileText,
+        },
+        {
+          href: `/${workspaceId}/sequences`,
+          label: "ลำดับอีเมล",
+          icon: GitBranch,
+        },
+      ],
     },
     {
-      href: `/${workspaceId}/campaigns`,
-      label: "แคมเปญ",
-      icon: MailOpen,
-    },
-    {
-      href: `/${workspaceId}/templates`,
-      label: "เทมเพลต",
-      icon: FileText,
-    },
-    {
-      href: `/${workspaceId}/sequences`,
-      label: "ซีเควนซ์",
-      icon: GitBranch,
-    },
-    {
-      href: `/${workspaceId}/reports`,
-      label: "รายงาน",
-      icon: BarChart3,
-    },
-    {
-      href: `/${workspaceId}/settings`,
-      label: "ตั้งค่า",
-      icon: Settings,
-      requiresRole: ["agency_admin", "agency_member"],
+      title: "สนับสนุน",
+      items: [
+        {
+          href: `/${workspaceId}/settings`,
+          label: "ตั้งค่า",
+          icon: Settings,
+          requiresRole: ["agency_admin", "agency_member"],
+        },
+        {
+          href: `/${workspaceId}/help`,
+          label: "ช่วยเหลือ",
+          icon: HelpCircle,
+        },
+      ],
     },
   ]
 }
@@ -111,7 +138,6 @@ export default function Sidebar({
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  // อ่านค่าจาก localStorage หลัง mount เท่านั้น (ป้องกัน hydration mismatch)
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved === "true") setCollapsed(true)
@@ -126,26 +152,30 @@ export default function Sidebar({
     })
   }, [])
 
-  const navItems = workspaceId ? getNavItems(workspaceId) : []
+  const sections = workspaceId ? getNavSections(workspaceId) : []
 
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.requiresRole) return true
-    if (!role) return false
-    return item.requiresRole.includes(role)
-  })
+  // กรอง items ตาม role
+  const filteredSections = sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      if (!item.requiresRole) return true
+      if (!role) return false
+      return item.requiresRole.includes(role)
+    }),
+  }))
 
-  // ป้องกัน layout shift ก่อน mount — render เป็น expanded ก่อน
   const isCollapsed = mounted ? collapsed : false
 
   return (
     <aside
       className="sticky top-0 flex h-screen shrink-0 flex-col overflow-visible transition-[width] duration-300 ease-in-out"
       style={{
-        width: isCollapsed ? "64px" : "240px",
-        background: "linear-gradient(180deg, #1E3A5F 0%, #152C4A 100%)",
+        width: isCollapsed ? "64px" : "210px",
+        backgroundColor: "var(--color-white)",
+        borderRight: "1px solid var(--color-border)",
       }}
     >
-      {/* Toggle Button — ยื่นออกจากขอบขวาของ sidebar */}
+      {/* Toggle Button */}
       <button
         onClick={toggleCollapsed}
         aria-label={isCollapsed ? "ขยาย sidebar" : "ยุบ sidebar"}
@@ -168,16 +198,16 @@ export default function Sidebar({
       {/* Logo */}
       <div className="flex h-16 shrink-0 items-center overflow-hidden px-4">
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
-          {/* Icon-only logo mark */}
           <div
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-            style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+            style={{ backgroundColor: "var(--color-primary)" }}
           >
             <span className="text-xs font-extrabold text-white">L</span>
           </div>
           <span
-            className="whitespace-nowrap text-lg font-extrabold tracking-tight text-white transition-[opacity,width] duration-300 ease-in-out overflow-hidden"
+            className="whitespace-nowrap text-[18px] font-bold tracking-tight transition-[opacity,width] duration-300 ease-in-out overflow-hidden"
             style={{
+              color: "var(--color-ink)",
               opacity: isCollapsed ? 0 : 1,
               width: isCollapsed ? "0px" : "120px",
               display: "block",
@@ -195,17 +225,27 @@ export default function Sidebar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="flex h-9 w-full items-center justify-center rounded-lg transition-colors hover:bg-white/10"
+                  className="flex h-9 w-full items-center justify-center rounded-lg transition-colors"
                   style={{ borderRadius: "10px" }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor =
+                      "var(--color-canvas)"
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = ""
+                  }}
                 >
                   <div
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded"
                     style={{
-                      backgroundColor: "rgba(255,255,255,0.15)",
+                      backgroundColor: "var(--color-primary-light)",
                       borderRadius: "4px",
                     }}
                   >
-                    <Building2 className="h-3 w-3 text-white" />
+                    <Building2
+                      className="h-3 w-3"
+                      style={{ color: "var(--color-primary)" }}
+                    />
                   </div>
                 </div>
               </TooltipTrigger>
@@ -216,18 +256,27 @@ export default function Sidebar({
           ) : (
             <div
               className="flex items-center gap-2 rounded-lg px-3 py-2"
-              style={{ backgroundColor: "rgba(255,255,255,0.08)", borderRadius: "10px" }}
+              style={{
+                backgroundColor: "var(--color-canvas)",
+                borderRadius: "10px",
+              }}
             >
               <div
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded"
                 style={{
-                  backgroundColor: "rgba(255,255,255,0.15)",
+                  backgroundColor: "var(--color-primary-light)",
                   borderRadius: "4px",
                 }}
               >
-                <Building2 className="h-3 w-3 text-white" />
+                <Building2
+                  className="h-3 w-3"
+                  style={{ color: "var(--color-primary)" }}
+                />
               </div>
-              <span className="truncate text-xs font-semibold text-white">
+              <span
+                className="truncate text-xs font-semibold"
+                style={{ color: "var(--color-ink)" }}
+              >
                 {workspaceName}
               </span>
             </div>
@@ -237,98 +286,112 @@ export default function Sidebar({
 
       {/* Divider */}
       <div
-        className="mx-4 mb-2 h-px"
-        style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+        className="mx-4 mb-1 h-px"
+        style={{ backgroundColor: "var(--color-border)" }}
       />
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-1">
-        <ul className="space-y-0.5">
-          {filteredNavItems.map(({ href, label, icon: Icon }) => {
-            const isActive =
-              href === `/${workspaceId}`
-                ? pathname === `/${workspaceId}`
-                : pathname.startsWith(href)
-
-            const linkContent = (
-              <Link
-                href={href}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                  isActive
-                    ? "text-white"
-                    : "text-white/65 hover:text-white"
-                )}
-                style={{
-                  borderRadius: "10px",
-                  backgroundColor: isActive
-                    ? "rgba(255,255,255,0.14)"
-                    : undefined,
-                  justifyContent: isCollapsed ? "center" : undefined,
-                  paddingLeft: isCollapsed ? "0" : undefined,
-                  paddingRight: isCollapsed ? "0" : undefined,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.backgroundColor =
-                      "rgba(255,255,255,0.08)"
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = ""
-                  }
-                }}
+      <nav className="flex-1 overflow-x-hidden overflow-y-auto px-2 pb-2">
+        {filteredSections.map((section) => (
+          <div key={section.title}>
+            {/* Section Header — ซ่อนตอน collapsed */}
+            {!isCollapsed && (
+              <p
+                className="px-4 pb-2 pt-6 text-xs font-medium uppercase tracking-wide"
+                style={{ color: "var(--color-muted)" }}
               >
-                {/* Active left border accent */}
-                {isActive && (
-                  <span
-                    className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
-                    style={{ backgroundColor: "rgba(255,255,255,0.7)" }}
-                  />
-                )}
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-transform duration-150",
-                    isActive ? "text-white" : "text-white/65 group-hover:text-white"
-                  )}
-                />
-                {/* Label with fade/slide transition */}
-                <span
-                  className="overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-300 ease-in-out"
-                  style={{
-                    opacity: isCollapsed ? 0 : 1,
-                    maxWidth: isCollapsed ? "0px" : "160px",
-                    display: "block",
-                  }}
-                >
-                  {label}
-                </span>
-              </Link>
-            )
+                {section.title}
+              </p>
+            )}
+            {/* เว้นช่องว่างเล็กน้อยตอน collapsed แทน section header */}
+            {isCollapsed && <div className="h-3" />}
 
-            return (
-              <li key={href}>
-                {isCollapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                    <TooltipContent side="right" sideOffset={8}>
-                      <p>{label}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  linkContent
-                )}
-              </li>
-            )
-          })}
-        </ul>
+            <ul className="space-y-0.5">
+              {section.items.map(({ href, label, icon: Icon, badge }) => {
+                const isActive =
+                  href === `/${workspaceId}`
+                    ? pathname === `/${workspaceId}`
+                    : href !== "#" && pathname.startsWith(href)
+
+                const linkContent = (
+                  <Link
+                    href={href}
+                    className={cn(
+                      "group relative flex items-center gap-3 py-2 text-sm font-medium transition-colors duration-150",
+                      isCollapsed ? "justify-center px-0" : "mx-2 px-3"
+                    )}
+                    style={{
+                      borderRadius: "8px",
+                      height: "36px",
+                      backgroundColor: isActive
+                        ? "var(--color-primary-light)"
+                        : undefined,
+                      color: isActive
+                        ? "var(--color-primary)"
+                        : "var(--color-ink)",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          "var(--color-canvas)"
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor =
+                          ""
+                      }
+                    }}
+                  >
+                    <Icon
+                      className="shrink-0 transition-colors duration-150"
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        color: isActive
+                          ? "var(--color-primary)"
+                          : "var(--color-muted)",
+                      }}
+                    />
+                    {/* Label + badge — ซ่อนตอน collapsed */}
+                    <span
+                      className="flex flex-1 items-center overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-300 ease-in-out"
+                      style={{
+                        opacity: isCollapsed ? 0 : 1,
+                        maxWidth: isCollapsed ? "0px" : "200px",
+                        display: "flex",
+                      }}
+                    >
+                      <span className="flex-1 truncate">{label}</span>
+                      {badge && !isCollapsed && badge}
+                    </span>
+                  </Link>
+                )
+
+                return (
+                  <li key={href}>
+                    {isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={8}>
+                          <p>{label}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      linkContent
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
-      {/* Subtle divider before user menu */}
+      {/* Divider before user menu */}
       <div
         className="mx-4 h-px"
-        style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+        style={{ backgroundColor: "var(--color-border)" }}
       />
 
       {/* User Menu */}
@@ -339,15 +402,23 @@ export default function Sidebar({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-white/10"
+                    className="flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors"
                     style={{ borderRadius: "10px" }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor =
+                        "var(--color-canvas)"
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor =
+                        ""
+                    }}
                   >
                     <Avatar className="h-8 w-8 shrink-0">
                       <AvatarFallback
                         className="text-xs font-semibold"
                         style={{
-                          backgroundColor: "rgba(255,255,255,0.2)",
-                          color: "white",
+                          backgroundColor: "var(--color-primary-light)",
+                          color: "var(--color-primary)",
                         }}
                       >
                         {getInitials(displayName)}
@@ -357,39 +428,51 @@ export default function Sidebar({
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={8}>
                   <p className="font-medium">{displayName}</p>
-                  <p className="text-xs text-muted-foreground">{email}</p>
+                  <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                    {email}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             ) : (
               <button
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/10"
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors"
                 style={{ borderRadius: "10px" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                    "var(--color-canvas)"
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = ""
+                }}
               >
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback
                     className="text-xs font-semibold"
                     style={{
-                      backgroundColor: "rgba(255,255,255,0.2)",
-                      color: "white",
+                      backgroundColor: "var(--color-primary-light)",
+                      color: "var(--color-primary)",
                     }}
                   >
                     {getInitials(displayName)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium text-white">
+                  <p
+                    className="truncate text-sm font-medium"
+                    style={{ color: "var(--color-ink)" }}
+                  >
                     {displayName}
                   </p>
                   <p
                     className="truncate text-xs"
-                    style={{ color: "rgba(255,255,255,0.6)" }}
+                    style={{ color: "var(--color-muted)" }}
                   >
                     {email}
                   </p>
                 </div>
                 <ChevronDown
                   className="h-3.5 w-3.5 shrink-0"
-                  style={{ color: "rgba(255,255,255,0.6)" }}
+                  style={{ color: "var(--color-muted)" }}
                 />
               </button>
             )}
@@ -398,10 +481,11 @@ export default function Sidebar({
           <DropdownMenuContent
             align={isCollapsed ? "start" : "end"}
             side="top"
-            className="w-52 border-border bg-white text-ink shadow-lg"
+            className="w-52"
             style={{
               borderRadius: "12px",
               backgroundColor: "#FFFFFF",
+              border: "1px solid var(--color-border)",
               color: "var(--color-ink)",
             }}
           >
