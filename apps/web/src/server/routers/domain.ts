@@ -1,7 +1,23 @@
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { Resend } from 'resend'
 import { router, protectedProcedure } from '@/server/trpc'
 import { createClient } from '@/lib/supabase/server'
+
+// ============================================================
+// Resend client
+// ============================================================
+
+function getResend(): Resend {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'RESEND_API_KEY ไม่ได้ตั้งค่า — กรุณาตั้งค่าก่อนจัดการ domain',
+    })
+  }
+  return new Resend(apiKey)
+}
 
 // ============================================================
 // Helpers
@@ -61,7 +77,19 @@ export const domainRouter = router({
         })
       }
 
-      return data ?? []
+      // Map DB columns → frontend-friendly shape
+      return (data ?? []).map((d) => ({
+        id: d.id,
+        domain: d.domain,
+        status: d.dkim_status === 'verified' && d.spf_status === 'verified' ? 'verified' : 'pending',
+        dkim_verified: d.dkim_status === 'verified',
+        spf_verified: d.spf_status === 'verified',
+        dmarc_verified: d.dmarc_status === 'verified',
+        daily_limit: d.daily_send_limit,
+        warmup_enabled: d.warmup_enabled,
+        created_at: d.created_at,
+        last_verified_at: d.verified_at,
+      }))
     }),
 
   // ----------------------------------------------------------
@@ -71,7 +99,7 @@ export const domainRouter = router({
     .input(
       z.object({
         workspaceId: z.string().uuid(),
-        domain: z.string().min(3).regex(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/, 'รูปแบบ domain ไม่ถูกต้อง'),
+        domain: z.string().min(3).regex(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/, 'กรุณาใส่ domain เช่น bestsolutionscorp.com (ไม่ใช่อีเมล)'),
         dailyLimit: z.number().int().min(1).max(10000).default(500),
       }),
     )
@@ -94,53 +122,95 @@ export const domainRouter = router({
         })
       }
 
-      // สร้าง DNS records ที่ต้องการ (DKIM selector)
-      const dkimSelector = `leadflow-${Date.now().toString(36)}`
+      // ลงทะเบียน domain กับ Resend API
+      const resend = getResend()
+      let resendDomain: { id: string; records: Array<{ type: string; name: string; value: string; record: string }> }
+      try {
+        const result = await resend.domains.create({ name: input.domain })
+        if (result.error || !result.data) {
+          throw new Error(result.error?.message ?? 'Resend domain creation failed')
+        }
+        resendDomain = result.data as typeof resendDomain
+      } catch (err) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `ไม่สามารถลงทะเบียน domain กับ Resend ได้: ${err instanceof Error ? err.message : 'unknown error'}`,
+        })
+      }
+
+      // ดึง DNS records จาก Resend (log เพื่อ debug)
+      console.log('[domain.add] Resend records:', JSON.stringify(resendDomain.records, null, 2))
+
+      // Resend ส่ง records มาเป็น array — match ด้วยหลายเงื่อนไขเพื่อความยืดหยุ่น
+      const dkimRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'DKIM' || r.type === 'DKIM' || r.name?.includes('._domainkey')
+      )
+      const spfRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'SPF' || r.type === 'MX' || r.name?.startsWith('send')
+      )
+      const dmarcRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'DMARC' || r.name?.includes('_dmarc') || r.value?.includes('dmarc')
+      )
 
       const { data, error } = await supabase
         .from('sending_domains')
         .insert({
           workspace_id: input.workspaceId,
           domain: input.domain,
-          status: 'pending',
-          dkim_selector: dkimSelector,
-          daily_limit: input.dailyLimit,
+          resend_domain_id: resendDomain.id,
+          dkim_status: 'pending',
+          spf_status: 'pending',
+          dmarc_status: 'pending',
+          dkim_record: dkimRec?.value ?? null,
+          spf_record: spfRec?.value ?? null,
+          dmarc_record: dmarcRec?.value ?? null,
+          daily_send_limit: input.dailyLimit,
           warmup_enabled: false,
-          dkim_verified: false,
-          spf_verified: false,
-          dmarc_verified: false,
         })
         .select('*')
         .single()
 
       if (error || !data) {
+        console.error('Domain insert error:', error)
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'ไม่สามารถเพิ่ม domain ได้',
+          message: `ไม่สามารถเพิ่ม domain ได้: ${error?.message ?? 'unknown error'}`,
           cause: error,
         })
       }
 
-      // DNS records ที่ต้องตั้งค่า
+      // DNS records จาก Resend จริง
       const dnsRecords = {
         dkim: {
-          type: 'TXT',
-          host: `${dkimSelector}._domainkey.${input.domain}`,
-          value: `v=DKIM1; k=rsa; p=<public_key_will_be_generated>`,
+          type: dkimRec?.type ?? 'TXT',
+          host: dkimRec?.name ?? `resend._domainkey.${input.domain}`,
+          value: dkimRec?.value ?? '',
         },
         spf: {
-          type: 'TXT',
-          host: input.domain,
-          value: `v=spf1 include:_spf.leadflow.app ~all`,
+          type: spfRec?.type ?? 'TXT',
+          host: spfRec?.name ?? input.domain,
+          value: spfRec?.value ?? '',
         },
         dmarc: {
-          type: 'TXT',
-          host: `_dmarc.${input.domain}`,
-          value: `v=DMARC1; p=none; rua=mailto:dmarc@leadflow.app`,
+          type: dmarcRec?.type ?? 'TXT',
+          host: dmarcRec?.name ?? `_dmarc.${input.domain}`,
+          value: dmarcRec?.value ?? '',
         },
       }
 
-      return { ...data, dnsRecords }
+      return {
+        id: data.id,
+        domain: data.domain,
+        status: 'pending',
+        dkim_verified: false,
+        spf_verified: false,
+        dmarc_verified: false,
+        daily_limit: data.daily_send_limit,
+        warmup_enabled: data.warmup_enabled,
+        created_at: data.created_at,
+        last_verified_at: null,
+        dnsRecords,
+      }
     }),
 
   // ----------------------------------------------------------
@@ -168,41 +238,59 @@ export const domainRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ domain นี้' })
       }
 
-      // TODO: เรียก Python API เพื่อ trigger DNS verification จริง
-      // ตอนนี้ simulate verification (ใน production จะเรียก external service)
-      const pythonApiUrl = process.env.PYTHON_API_URL
-      let dkimVerified = domain.dkim_verified
-      let spfVerified = domain.spf_verified
-      let dmarcVerified = domain.dmarc_verified
-
-      if (pythonApiUrl) {
-        try {
-          const res = await fetch(`${pythonApiUrl}/api/domain/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ domain: domain.domain, dkimSelector: domain.dkim_selector }),
-          })
-          if (res.ok) {
-            const result = await res.json() as { dkim?: boolean; spf?: boolean; dmarc?: boolean }
-            dkimVerified = result.dkim ?? false
-            spfVerified = result.spf ?? false
-            dmarcVerified = result.dmarc ?? false
-          }
-        } catch {
-          // ถ้าเรียก Python API ไม่ได้ ให้ผ่านโดยไม่ error
-        }
+      if (!domain.resend_domain_id) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Domain นี้ยังไม่ได้ลงทะเบียนกับ Resend — กรุณาลบแล้วเพิ่มใหม่',
+        })
       }
 
-      const newStatus = dkimVerified && spfVerified ? 'verified' : 'pending'
+      // เรียก Resend API เพื่อเช็คสถานะ verification จริง
+      const resend = getResend()
+      let resendDomain: { status: string; records: Array<{ type: string; name: string; value: string; record: string; status: string }> }
+      try {
+        // Trigger verification first
+        await resend.domains.verify(domain.resend_domain_id)
+        // Then get updated status
+        const result = await resend.domains.get(domain.resend_domain_id)
+        if (result.error || !result.data) {
+          throw new Error(result.error?.message ?? 'Failed to get domain status')
+        }
+        resendDomain = result.data as typeof resendDomain
+      } catch (err) {
+        if (err instanceof TRPCError) throw err
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `ไม่สามารถตรวจสอบกับ Resend ได้: ${err instanceof Error ? err.message : 'unknown error'}`,
+        })
+      }
+
+      // Map Resend record statuses
+      const dkimRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'DKIM' || r.type === 'DKIM' || r.name?.includes('._domainkey')
+      )
+      const spfRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'SPF' || r.type === 'MX' || r.name?.startsWith('send')
+      )
+      const dmarcRec = resendDomain.records?.find((r: Record<string, string>) =>
+        r.record === 'DMARC' || r.name?.includes('_dmarc') || r.value?.includes('dmarc')
+      )
+
+      const dkimVerified = dkimRec?.status === 'verified' || resendDomain.status === 'verified'
+      const spfVerified = spfRec?.status === 'verified' || resendDomain.status === 'verified'
+      const dmarcVerified = dmarcRec?.status === 'verified' || resendDomain.status === 'verified'
+      const allVerified = dkimVerified && spfVerified
 
       const { data: updated, error } = await supabase
         .from('sending_domains')
         .update({
-          dkim_verified: dkimVerified,
-          spf_verified: spfVerified,
-          dmarc_verified: dmarcVerified,
-          status: newStatus,
-          last_verified_at: new Date().toISOString(),
+          dkim_status: dkimVerified ? 'verified' : 'pending',
+          spf_status: spfVerified ? 'verified' : 'pending',
+          dmarc_status: dmarcVerified ? 'verified' : 'pending',
+          dkim_record: dkimRec?.value ?? domain.dkim_record,
+          spf_record: spfRec?.value ?? domain.spf_record,
+          dmarc_record: dmarcRec?.value ?? domain.dmarc_record,
+          verified_at: allVerified ? new Date().toISOString() : domain.verified_at,
         })
         .eq('id', input.domainId)
         .eq('workspace_id', input.workspaceId)
@@ -212,13 +300,22 @@ export const domainRouter = router({
       if (error || !updated) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'ไม่สามารถตรวจสอบ domain ได้',
+          message: 'ไม่สามารถอัปเดตสถานะ domain ได้',
           cause: error,
         })
       }
 
       return {
-        ...updated,
+        id: updated.id,
+        domain: updated.domain,
+        status: allVerified ? 'verified' : 'pending',
+        dkim_verified: dkimVerified,
+        spf_verified: spfVerified,
+        dmarc_verified: dmarcVerified,
+        daily_limit: updated.daily_send_limit,
+        warmup_enabled: updated.warmup_enabled,
+        created_at: updated.created_at,
+        last_verified_at: updated.verified_at,
         verificationResult: {
           dkim: dkimVerified,
           spf: spfVerified,
@@ -274,7 +371,7 @@ export const domainRouter = router({
 
       const { data: domain } = await supabase
         .from('sending_domains')
-        .select('domain, dkim_selector, dkim_public_key')
+        .select('domain, resend_domain_id, dkim_record, spf_record, dmarc_record')
         .eq('id', input.domainId)
         .eq('workspace_id', input.workspaceId)
         .maybeSingle()
@@ -283,23 +380,64 @@ export const domainRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ domain นี้' })
       }
 
+      // ถ้ามี resend_domain_id ให้ดึง DNS records จาก Resend API (ค่าล่าสุด)
+      if (domain.resend_domain_id) {
+        try {
+          const resend = getResend()
+          const result = await resend.domains.get(domain.resend_domain_id)
+          if (result.data?.records) {
+            const records = result.data.records as Array<Record<string, string>>
+            const dkimRec = records.find((r) =>
+              r.record === 'DKIM' || r.type === 'DKIM' || r.name?.includes('._domainkey')
+            )
+            const spfRec = records.find((r) =>
+              r.record === 'SPF' || r.type === 'MX' || r.name?.startsWith('send')
+            )
+            const dmarcRec = records.find((r) =>
+              r.record === 'DMARC' || r.name?.includes('_dmarc') || r.value?.includes('dmarc')
+            )
+
+            return {
+              dkim: {
+                type: dkimRec?.type ?? 'TXT' as const,
+                host: dkimRec?.name ?? `resend._domainkey.${domain.domain}`,
+                value: dkimRec?.value ?? '',
+                status: dkimRec?.status,
+              },
+              spf: {
+                type: spfRec?.type ?? 'TXT' as const,
+                host: spfRec?.name ?? domain.domain,
+                value: spfRec?.value ?? '',
+                status: spfRec?.status,
+              },
+              dmarc: {
+                type: dmarcRec?.type ?? 'TXT' as const,
+                host: dmarcRec?.name ?? `_dmarc.${domain.domain}`,
+                value: dmarcRec?.value ?? '',
+                status: dmarcRec?.status,
+              },
+            }
+          }
+        } catch {
+          // Fallback to DB values if Resend API fails
+        }
+      }
+
       return {
         dkim: {
           type: 'TXT' as const,
-          host: `${domain.dkim_selector}._domainkey.${domain.domain}`,
-          value: domain.dkim_public_key
-            ? `v=DKIM1; k=rsa; p=${domain.dkim_public_key}`
-            : `v=DKIM1; k=rsa; p=<กำลังสร้าง...>`,
+          host: `resend._domainkey.${domain.domain}`,
+          value: domain.dkim_record ?? '',
         },
         spf: {
           type: 'TXT' as const,
           host: `@`,
-          value: `v=spf1 include:_spf.leadflow.app ~all`,
+          value: domain.spf_record ?? '',
         },
         dmarc: {
           type: 'TXT' as const,
           host: `_dmarc`,
-          value: `v=DMARC1; p=none; rua=mailto:dmarc@leadflow.app`,
+          value: domain.dmarc_record ?? '',
         },
       }
     }),

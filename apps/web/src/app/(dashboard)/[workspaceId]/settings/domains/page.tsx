@@ -42,9 +42,10 @@ import { trpc } from "@/lib/trpc/client"
 // ============================================================
 
 interface DnsRecord {
-  type: "TXT"
+  type: string
   host: string
   value: string
+  status?: string
 }
 
 interface DomainWithDns {
@@ -92,7 +93,19 @@ function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(value)
+    try {
+      await navigator.clipboard.writeText(value)
+    } catch {
+      // Fallback for non-secure contexts
+      const textarea = document.createElement("textarea")
+      textarea.value = value
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -168,8 +181,17 @@ export default function DomainsSettingsPage() {
   }, [fetchDomains])
 
   const handleAdd = async () => {
-    if (!newDomain.trim()) {
+    const domain = newDomain.trim().toLowerCase()
+    if (!domain) {
       toast.error("กรุณาใส่ชื่อ domain")
+      return
+    }
+    if (domain.includes("@")) {
+      toast.error("กรุณาใส่ domain ไม่ใช่อีเมล เช่น bestsolutionscorp.com")
+      return
+    }
+    if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(domain)) {
+      toast.error("รูปแบบ domain ไม่ถูกต้อง เช่น bestsolutionscorp.com หรือ mail.yourdomain.com")
       return
     }
     setAdding(true)
@@ -266,6 +288,7 @@ export default function DomainsSettingsPage() {
             </p>
           </div>
           <Button
+            className="text-white"
             onClick={() => setAddOpen(true)}
             style={{
               backgroundColor: "var(--color-primary)",
@@ -315,6 +338,7 @@ export default function DomainsSettingsPage() {
               </p>
               <Button
                 size="sm"
+                className="text-white"
                 onClick={() => setAddOpen(true)}
                 style={{
                   backgroundColor: "var(--color-primary)",
@@ -412,7 +436,7 @@ export default function DomainsSettingsPage() {
                     {/* Daily Limit */}
                     <TableCell>
                       <span className="text-sm" style={{ color: "var(--color-ink)" }}>
-                        {domain.daily_limit.toLocaleString()} / วัน
+                        {domain.daily_limit?.toLocaleString() ?? "—"} / วัน
                       </span>
                     </TableCell>
 
@@ -432,7 +456,7 @@ export default function DomainsSettingsPage() {
 
                     {/* Actions */}
                     <TableCell>
-                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="outline"
                           size="sm"
