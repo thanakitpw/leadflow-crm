@@ -247,11 +247,64 @@ export async function sendCampaign(campaignId: string): Promise<SendCampaignResu
     .neq('email', '')
 
   // Apply audience filters
-  if (filter.status && Array.isArray(filter.status) && filter.status.length > 0) {
-    leadsQuery = leadsQuery.in('status', filter.status as string[])
+
+  // status: รองรับทั้ง string และ array (จาก create form ส่งมาเป็น string)
+  if (filter.status) {
+    if (Array.isArray(filter.status) && (filter.status as string[]).length > 0) {
+      leadsQuery = leadsQuery.in('status', filter.status as string[])
+    } else if (typeof filter.status === 'string' && filter.status !== '') {
+      leadsQuery = leadsQuery.eq('status', filter.status as string)
+    }
   }
+
   if (filter.category && typeof filter.category === 'string') {
     leadsQuery = leadsQuery.eq('category', filter.category)
+  }
+
+  // score filter: query lead_scores ก่อน แล้วใช้ .in() กับ leads
+  const minScore = typeof filter.minScore === 'number' ? filter.minScore : undefined
+  const maxScore = typeof filter.maxScore === 'number' ? filter.maxScore : undefined
+
+  if (minScore !== undefined || maxScore !== undefined) {
+    let scoreQuery = supabase.from('lead_scores').select('lead_id')
+
+    if (minScore !== undefined) {
+      scoreQuery = scoreQuery.gte('score', minScore)
+    }
+    if (maxScore !== undefined) {
+      scoreQuery = scoreQuery.lte('score', maxScore)
+    }
+
+    const { data: scoreRows, error: scoreErr } = await scoreQuery
+
+    if (scoreErr) {
+      throw new Error(`Failed to load lead scores: ${scoreErr.message}`)
+    }
+
+    const scoredLeadIds = (scoreRows ?? []).map((r: { lead_id: string }) => r.lead_id)
+
+    if (scoredLeadIds.length === 0) {
+      // ไม่มี lead ใดผ่าน score filter — return early ไม่ต้องส่งเลย
+      await supabase
+        .from('campaigns')
+        .update({
+          status: 'sent',
+          completed_at: new Date().toISOString(),
+          total_recipients: 0,
+        })
+        .eq('id', campaignId)
+
+      return {
+        campaignId,
+        totalRecipients: 0,
+        sent: 0,
+        failed: 0,
+        skipped: 0,
+        results: [],
+      }
+    }
+
+    leadsQuery = leadsQuery.in('id', scoredLeadIds)
   }
 
   // จำกัดตาม effective limit

@@ -580,6 +580,41 @@ export const campaignRouter = router({
       const supabase = await createClient()
       await verifyWorkspaceMember(supabase, ctx.user.id, input.workspaceId)
 
+      const { minScore, maxScore, status } = input.audienceFilter ?? {}
+
+      // ถ้ามี score filter ให้ query lead_scores ก่อนเพื่อหา lead_ids ที่ตรงเงื่อนไข
+      let scoredLeadIds: string[] | null = null
+
+      if (minScore !== undefined || maxScore !== undefined) {
+        let scoreQuery = supabase
+          .from('lead_scores')
+          .select('lead_id')
+
+        if (minScore !== undefined) {
+          scoreQuery = scoreQuery.gte('score', minScore)
+        }
+        if (maxScore !== undefined) {
+          scoreQuery = scoreQuery.lte('score', maxScore)
+        }
+
+        const { data: scoreRows, error: scoreErr } = await scoreQuery
+
+        if (scoreErr) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'ไม่สามารถดึงข้อมูล lead scores ได้',
+            cause: scoreErr,
+          })
+        }
+
+        scoredLeadIds = (scoreRows ?? []).map((r) => r.lead_id as string)
+
+        // ถ้าไม่มี lead ใดผ่าน score filter เลย ให้คืน 0 ทันที
+        if (scoredLeadIds.length === 0) {
+          return { count: 0 }
+        }
+      }
+
       let query = supabase
         .from('leads')
         .select('id', { count: 'exact', head: true })
@@ -587,12 +622,98 @@ export const campaignRouter = router({
         .not('email', 'is', null)
         .neq('email', '')
 
-      if (input.audienceFilter?.status) {
-        query = query.eq('status', input.audienceFilter.status)
+      if (status) {
+        query = query.eq('status', status)
+      }
+
+      if (scoredLeadIds !== null) {
+        query = query.in('id', scoredLeadIds)
       }
 
       const { count } = await query
 
       return { count: count ?? 0 }
+    }),
+
+  // ----------------------------------------------------------
+  // sendTestEmail — ส่ง test email ไปยัง email ของ user
+  // ----------------------------------------------------------
+  sendTestEmail: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        templateId: z.string().uuid().optional(),
+        domainId: z.string().uuid().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const supabase = await createClient()
+      await verifyWorkspaceMember(supabase, ctx.user.id, input.workspaceId)
+
+      const userEmail = ctx.user.email
+      if (!userEmail) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'ไม่พบ email ของผู้ใช้',
+        })
+      }
+
+      let subject = '[ทดสอบ] ทดสอบแคมเปญ'
+      let htmlBody = `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+          <h2 style="color:#1E3A5F;">ทดสอบการส่งอีเมล</h2>
+          <p style="color:#1C1814;">นี่คืออีเมลทดสอบจาก LeadFlow</p>
+          <p style="color:#7A6F68;font-size:14px;">ระบบส่งอีเมลทำงานปกติ</p>
+        </div>
+      `
+
+      // ถ้ามี templateId ให้โหลด template
+      if (input.templateId) {
+        const { data: template, error: templateErr } = await supabase
+          .from('email_templates')
+          .select('subject, body_html')
+          .eq('id', input.templateId)
+          .eq('workspace_id', input.workspaceId)
+          .maybeSingle()
+
+        if (templateErr || !template) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'ไม่พบ email template นี้',
+          })
+        }
+
+        subject = `[ทดสอบ] ${template.subject}`
+        htmlBody = template.body_html as string
+      }
+
+      const PYTHON_API_URL = process.env.PYTHON_API_URL ?? 'http://localhost:8000'
+
+      const payload: Record<string, unknown> = {
+        to: userEmail,
+        subject,
+        html_body: htmlBody,
+        from_name: 'LeadFlow Test',
+      }
+
+      if (input.domainId) {
+        payload.domain_id = input.domainId
+      }
+
+      const res = await fetch(`${PYTHON_API_URL}/api/v1/email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `ไม่สามารถส่ง test email ได้: ${text}`,
+        })
+      }
+
+      return { success: true, sentTo: userEmail }
     }),
 })

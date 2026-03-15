@@ -75,6 +75,8 @@ interface EnrichedResult extends PlaceResult {
   isEnriching?: boolean
   enrichFailed?: boolean
   score?: number
+  scoreReasoning?: string
+  isScoring?: boolean
   // Social media fields
   facebook?: SocialLink | null
   line?: SocialLink | null
@@ -122,9 +124,9 @@ const AVATAR_COLORS = [
 ]
 
 const LEAD_TEMPERATURE = [
-  { label: "ลีดร้อน", min: 75, bg: "#FEE2E2", color: "#DC2626" },
-  { label: "ลีดอุ่น", min: 50, bg: "#FEF3C7", color: "#D97706" },
-  { label: "ลีดเย็น", min: 0, bg: "#DBEAFE", color: "#2563EB" },
+  { label: "Hot", min: 75, bg: "#FEE2E2", color: "#DC2626" },
+  { label: "Warm", min: 50, bg: "#FEF3C7", color: "#D97706" },
+  { label: "Cold", min: 0, bg: "#DBEAFE", color: "#2563EB" },
 ]
 
 const ENRICHMENT_CONCURRENCY = 3
@@ -356,15 +358,28 @@ function LeadListRow({
       {/* Score */}
       <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5">
         <div className="flex items-baseline gap-0.5">
-          {result.score != null ? (
-            <>
-              <span className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
-                {result.score}
-              </span>
-              <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-                /100
-              </span>
-            </>
+          {result.isScoring ? (
+            <span className="flex items-center gap-1 text-xs" style={{ color: "var(--color-ai)" }}>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              AI Scoring...
+            </span>
+          ) : result.score != null ? (
+            <div className="group relative">
+              <div className="flex items-baseline gap-0.5">
+                <span className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
+                  {result.score}
+                </span>
+                <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                  /100
+                </span>
+              </div>
+              {result.scoreReasoning && (
+                <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-64 rounded-lg border bg-white p-3 text-xs shadow-lg group-hover:pointer-events-auto group-hover:block" style={{ borderColor: "var(--color-border)", color: "var(--color-muted)" }}>
+                  <div className="mb-1 font-semibold" style={{ color: "var(--color-ai)" }}>AI Reasoning</div>
+                  {result.scoreReasoning}
+                </div>
+              )}
+            </div>
           ) : (
             <span className="text-base font-medium" style={{ color: "var(--color-muted)" }}>
               —
@@ -430,16 +445,28 @@ function LeadGridCard({
             {initials}
           </div>
         </div>
-        {result.score != null && (
-          <div className="flex items-baseline gap-0.5">
-            <span className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
-              {result.score}
-            </span>
-            <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-              /100
-            </span>
+        {result.isScoring ? (
+          <span className="flex items-center gap-1 text-xs" style={{ color: "var(--color-ai)" }}>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          </span>
+        ) : result.score != null ? (
+          <div className="group relative">
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
+                {result.score}
+              </span>
+              <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                /100
+              </span>
+            </div>
+            {result.scoreReasoning && (
+              <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-56 rounded-lg border bg-white p-2.5 text-xs shadow-lg group-hover:pointer-events-auto group-hover:block" style={{ borderColor: "var(--color-border)", color: "var(--color-muted)" }}>
+                <div className="mb-1 font-semibold" style={{ color: "var(--color-ai)" }}>AI Reasoning</div>
+                {result.scoreReasoning}
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       <label htmlFor={`grid-${result.place_id}`} className="block cursor-pointer">
@@ -826,6 +853,94 @@ export default function LeadSearchPage() {
   }, [])
 
   // ============================================================
+  // AI Lead Scoring
+  // ============================================================
+
+  const runScoring = useCallback(async (places: EnrichedResult[]) => {
+    const pythonApiUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL ?? "http://localhost:8000"
+    if (places.length === 0) return
+
+    // Mark all as scoring
+    setResults((prev) => {
+      if (!prev) return prev
+      const updated = prev.map((r) => ({ ...r, isScoring: true }))
+      resultsRef.current = updated
+      return updated
+    })
+
+    // Batch in groups of 10 (API limit)
+    const BATCH_SIZE = 10
+    for (let i = 0; i < places.length; i += BATCH_SIZE) {
+      const batch = places.slice(i, i + BATCH_SIZE)
+      const leads = batch.map((p) => ({
+        id: p.place_id,
+        name: p.name,
+        rating: p.rating ?? null,
+        review_count: p.review_count ?? null,
+        website: p.website ?? null,
+        email: p.email ?? null,
+        phone: p.phone ?? null,
+        category: p.category ?? null,
+        address: p.address ?? null,
+      }))
+
+      try {
+        const res = await fetch(`${pythonApiUrl}/api/v1/scoring/score-batch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leads }),
+        })
+
+        if (res.ok) {
+          const data = await res.json() as {
+            results: Array<{ lead_id: string; score: number; reasoning: string }>
+          }
+          const scoreMap = new Map(data.results.map((r) => [r.lead_id, r]))
+
+          setResults((prev) => {
+            if (!prev) return prev
+            const updated = prev.map((r) => {
+              const scoreResult = scoreMap.get(r.place_id)
+              if (scoreResult) {
+                return {
+                  ...r,
+                  score: scoreResult.score,
+                  scoreReasoning: scoreResult.reasoning,
+                  isScoring: false,
+                }
+              }
+              return r
+            })
+            resultsRef.current = updated
+            return updated
+          })
+        } else {
+          // Mark batch as done (failed)
+          const batchIds = new Set(batch.map((p) => p.place_id))
+          setResults((prev) => {
+            if (!prev) return prev
+            const updated = prev.map((r) =>
+              batchIds.has(r.place_id) ? { ...r, isScoring: false } : r
+            )
+            resultsRef.current = updated
+            return updated
+          })
+        }
+      } catch {
+        const batchIds = new Set(batch.map((p) => p.place_id))
+        setResults((prev) => {
+          if (!prev) return prev
+          const updated = prev.map((r) =>
+            batchIds.has(r.place_id) ? { ...r, isScoring: false } : r
+          )
+          resultsRef.current = updated
+          return updated
+        })
+      }
+    }
+  }, [])
+
+  // ============================================================
   // Search
   // ============================================================
 
@@ -875,12 +990,16 @@ export default function LeadSearchPage() {
       if (enrichSocial && enrichedResults.length > 0) {
         void runSocialEnrichment(enrichedResults)
       }
+      // Start AI scoring if enabled
+      if (enrichScore && enrichedResults.length > 0) {
+        void runScoring(enrichedResults)
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการค้นหา")
     } finally {
       setIsSearching(false)
     }
-  }, [keyword, Array.from(selectedSubCategories).join(" "), selectedCategory, lat, lng, radius, maxResults, enrichEmail, enrichSocial, onlyWithWebsite, runEnrichment, runSocialEnrichment])
+  }, [keyword, Array.from(selectedSubCategories).join(" "), selectedCategory, lat, lng, radius, maxResults, enrichEmail, enrichSocial, enrichScore, onlyWithWebsite, runEnrichment, runSocialEnrichment, runScoring])
 
   // ============================================================
   // Selection

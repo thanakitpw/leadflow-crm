@@ -9,7 +9,6 @@ import {
   Send,
   Loader2,
   X,
-  Plus,
   ChevronRight,
   Mail,
   FileText,
@@ -270,20 +269,17 @@ export default function CreateCampaignPage() {
   const [filterMinScore, setFilterMinScore] = useState("")
   const [filterMaxScore, setFilterMaxScore] = useState("")
   const [scheduleType, setScheduleType] = useState<"now" | "later">("later")
-  const [scheduledAt, setScheduledAt] = useState("2026-04-14T09:00")
+  const [scheduledAt, setScheduledAt] = useState("")
   const [dailyLimit, setDailyLimit] = useState("50")
   const [selectedDays, setSelectedDays] = useState<string[]>(["mon", "tue", "wed", "thu", "fri"])
   const [audienceTab, setAudienceTab] = useState<"leads" | "tags" | "csv">("leads")
-  const [activeFilters, setActiveFilters] = useState([
-    { id: "category", label: "หมวดหมู่: F&B" },
-    { id: "score", label: "AI Score ≥ 70" },
-    { id: "email", label: "มีอีเมล" },
-  ])
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
 
   // ── Data state ──────────────────────────────────────────────────────────────
   const [templates, setTemplates] = useState<Template[]>([])
   const [domains, setDomains] = useState<Domain[]>([])
-  const [audienceCount, setAudienceCount] = useState<number | null>(247)
+  const [audienceCount, setAudienceCount] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
@@ -445,13 +441,37 @@ export default function CreateCampaignPage() {
                 variant="outline"
                 type="button"
                 size="sm"
+                disabled={savingDraft || !name.trim()}
                 style={{
                   borderRadius: "var(--radius-btn)",
                   borderColor: "var(--color-primary)",
                   color: "var(--color-primary)",
                 }}
-                onClick={() => toast.success("บันทึกร่างเรียบร้อย")}
+                onClick={async () => {
+                  if (!name.trim()) { toast.error("กรุณาใส่ชื่อแคมเปญ"); return }
+                  setSavingDraft(true)
+                  try {
+                    const campaign = await trpc.campaign.create.mutate({
+                      workspaceId,
+                      name: name.trim(),
+                      templateId: templateId || undefined,
+                      sendingDomainId: domainId || undefined,
+                      audienceFilter: {
+                        status: filterStatus !== "all" ? (filterStatus as "new" | "contacted" | "qualified" | "unqualified") : undefined,
+                        minScore: filterMinScore ? parseInt(filterMinScore) : undefined,
+                        maxScore: filterMaxScore ? parseInt(filterMaxScore) : undefined,
+                      },
+                    })
+                    toast.success("บันทึกร่างเรียบร้อย")
+                    router.push(`/${workspaceId}/campaigns/${campaign.id}`)
+                  } catch {
+                    toast.error("ไม่สามารถบันทึกร่างได้")
+                  } finally {
+                    setSavingDraft(false)
+                  }
+                }}
               >
+                {savingDraft && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                 บันทึกร่าง
               </Button>
               <Button
@@ -526,41 +546,6 @@ export default function CreateCampaignPage() {
                       placeholder="เช่น ติดต่อร้านอาหารในกรุงเทพ — เม.ย. 2026"
                       style={{ borderRadius: "var(--radius-input)" }}
                     />
-                  </div>
-
-                  {/* Client Workspace + หมวดหมู่ */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label style={{ color: "var(--color-ink)", fontSize: 13, fontWeight: 500 }}>
-                        Client Workspace <span style={{ color: "var(--color-danger)" }}>*</span>
-                      </Label>
-                      <Select defaultValue="default">
-                        <SelectTrigger style={{ borderRadius: "var(--radius-input)" }}>
-                          <SelectValue placeholder="เลือก workspace" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default">Workspace หลัก</SelectItem>
-                          <SelectItem value="client-a">Client A</SelectItem>
-                          <SelectItem value="client-b">Client B</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label style={{ color: "var(--color-ink)", fontSize: 13, fontWeight: 500 }}>
-                        หมวดหมู่
-                      </Label>
-                      <Select defaultValue="fb">
-                        <SelectTrigger style={{ borderRadius: "var(--radius-input)" }}>
-                          <SelectValue placeholder="เลือกหมวดหมู่" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="fb">F&B</SelectItem>
-                          <SelectItem value="retail">Retail</SelectItem>
-                          <SelectItem value="service">Service</SelectItem>
-                          <SelectItem value="tech">Tech</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
 
                   {/* ส่งจากอีเมล */}
@@ -669,38 +654,30 @@ export default function CreateCampaignPage() {
 
                 {audienceTab === "leads" && (
                   <>
-                    {/* Filter pills */}
-                    <div className="mb-4 flex flex-wrap items-center gap-2">
-                      {activeFilters.map((f) => (
-                        <FilterPill
-                          key={f.id}
-                          label={f.label}
-                          onRemove={() =>
-                            setActiveFilters((prev) => prev.filter((x) => x.id !== f.id))
-                          }
-                        />
-                      ))}
-                      <button
-                        type="button"
-                        className="flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-opacity hover:opacity-70"
-                        style={{
-                          borderColor: "var(--color-border)",
-                          color: "var(--color-muted)",
-                          borderRadius: "var(--radius-badge)",
-                        }}
-                        onClick={() =>
-                          toast.info("ฟีเจอร์เพิ่ม filter กำลังพัฒนา")
-                        }
-                      >
-                        <Plus className="h-3 w-3" />
-                        เพิ่ม Filter
-                      </button>
-                    </div>
-
-                    {/* Advanced filter state inputs (hidden — preserved for tRPC) */}
-                    <input type="hidden" value={filterStatus} />
-                    <input type="hidden" value={filterMinScore} />
-                    <input type="hidden" value={filterMaxScore} />
+                    {/* Active filter pills (dynamic from actual filter state) */}
+                    {(filterStatus !== "all" || filterMinScore || filterMaxScore) && (
+                      <div className="mb-4 flex flex-wrap items-center gap-2">
+                        {filterStatus !== "all" && (
+                          <FilterPill
+                            label={`สถานะ: ${filterStatus === "new" ? "ใหม่" : filterStatus === "contacted" ? "ติดต่อแล้ว" : filterStatus === "qualified" ? "คัดแล้ว" : "ไม่ผ่าน"}`}
+                            onRemove={() => setFilterStatus("all")}
+                          />
+                        )}
+                        {filterMinScore && (
+                          <FilterPill
+                            label={`AI Score ≥ ${filterMinScore}`}
+                            onRemove={() => setFilterMinScore("")}
+                          />
+                        )}
+                        {filterMaxScore && (
+                          <FilterPill
+                            label={`AI Score ≤ ${filterMaxScore}`}
+                            onRemove={() => setFilterMaxScore("")}
+                          />
+                        )}
+                        <FilterPill label="มีอีเมล" onRemove={() => {}} />
+                      </div>
+                    )}
 
                     {/* Quick filter row */}
                     <div className="mb-5 grid grid-cols-3 gap-3">
@@ -781,7 +758,7 @@ export default function CreateCampaignPage() {
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--color-muted)" }}>
-                        ยกเว้น 12 unsubscribed · 4 bounced
+                        leads ที่มีอีเมลตามเงื่อนไข filter
                       </p>
                     </div>
                   </>
@@ -1126,13 +1103,32 @@ export default function CreateCampaignPage() {
                     type="button"
                     variant="outline"
                     className="w-full"
+                    disabled={sendingTest}
                     style={{
                       borderRadius: "var(--radius-btn)",
                       borderColor: "var(--color-primary)",
                       color: "var(--color-primary)",
                     }}
-                    onClick={() => toast.info("ส่งทดสอบไปที่อีเมลของคุณ")}
+                    onClick={async () => {
+                      setSendingTest(true)
+                      try {
+                        const result = await trpc.campaign.sendTestEmail.mutate({
+                          workspaceId,
+                          templateId: templateId || undefined,
+                          domainId: domainId || undefined,
+                        })
+                        toast.success(`ส่งทดสอบไปที่ ${result.sentTo} แล้ว`)
+                      } catch (err: unknown) {
+                        const msg = err && typeof err === "object" && "message" in err
+                          ? String((err as { message: string }).message)
+                          : "ไม่สามารถส่งทดสอบได้"
+                        toast.error(msg)
+                      } finally {
+                        setSendingTest(false)
+                      }
+                    }}
                   >
+                    {sendingTest ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                     ส่งทดสอบก่อน
                   </Button>
                 </div>

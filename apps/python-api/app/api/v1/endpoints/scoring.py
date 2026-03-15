@@ -6,6 +6,7 @@ POST /api/v1/scoring/score-batch
 
 import asyncio
 import logging
+import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -22,6 +23,15 @@ from app.services import lead_score_store
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scoring", tags=["Scoring"])
+
+
+def _is_uuid(value: str) -> bool:
+    """ตรวจว่า string เป็น UUID หรือไม่"""
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 
 def _lead_to_dict(lead) -> dict:
@@ -80,14 +90,12 @@ async def score_single_lead(request: ScoreLeadRequest) -> ScoreLeadResponse:
             reasoning=raw_result["reasoning"],
         )
 
-        # บันทึก score ลง Supabase แบบ non-blocking (ไม่ block response)
-        if not raw_result.get("error"):
-            asyncio.create_task(
-                lead_score_store.save_score(
-                    lead_id=lead.id,
-                    score=raw_result["score"],
-                    reasoning=raw_result["reasoning"],
-                )
+        # บันทึก score ลง Supabase (เฉพาะเมื่อ lead_id เป็น UUID จริง)
+        if not raw_result.get("error") and _is_uuid(lead.id):
+            await lead_score_store.save_score(
+                lead_id=lead.id,
+                score=raw_result["score"],
+                reasoning=raw_result["reasoning"],
             )
 
         return ScoreLeadResponse(result=result)
@@ -149,8 +157,8 @@ async def score_leads_batch_endpoint(request: ScoreBatchRequest) -> ScoreBatchRe
                 )
             )
 
-            # เก็บ scores ที่สำเร็จไว้บันทึก (ข้าม error entries)
-            if not raw.get("error"):
+            # เก็บ scores ที่สำเร็จไว้บันทึก (เฉพาะ UUID lead_id, ข้าม Places ID)
+            if not raw.get("error") and _is_uuid(lead_id):
                 scores_to_save.append({
                     "lead_id": lead_id,
                     "score": raw["score"],
