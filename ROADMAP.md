@@ -541,15 +541,48 @@
 
 ```
 Phase 0: Project Setup        [~] 15/16 tasks
-Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← Phase 1 เสร็จสมบูรณ์แล้ว
-Phase 2: Lead Generation      [~] 52/53 tasks  ← เสร็จเกือบหมด เหลือ Supabase Realtime
-Phase 3: Email Outreach       [~] 48/49 tasks  ← Email Integration เสร็จ: campaign send, template test send, sequence processing (2026-03-14)
-Phase 4: เชื่อม 2 ระบบ        [x] 28/28 tasks ← Phase 4 เสร็จสมบูรณ์ (Frontend UI เสร็จ 2026-03-12)
+Phase 1: Auth & Multi-tenant  [x] 30/30 tasks ← เสร็จสมบูรณ์
+Phase 2: Lead Generation      [~] 52/53 tasks  ← เหลือ Supabase Realtime
+Phase 3: Email Outreach       [~] 49/55 tasks  ← เหลือ 6 tasks (bounce mgmt, unsubscribe list, realtime tracking, trigger.dev, sequence conditions, timezone)
+Phase 4: เชื่อม 2 ระบบ        [x] 28/28 tasks ← เสร็จสมบูรณ์
 Phase 5: CRM Layer            [ ] 0/15 tasks
-Phase 6: SaaS Readiness       [ ] 0/68 tasks  ← ใหม่: Billing, Limits, Admin, Security, Monitoring
-Phase 7: Scale & Advanced     [ ] 0/38 tasks  ← ใหม่: SES migration, Public API, Webhooks, Integrations, White-label, i18n
+Phase 6: SaaS Readiness       [ ] 0/68 tasks
+Phase 7: Scale & Advanced     [ ] 0/53 tasks  ← เพิ่ม AI Copilot + Marketing Website
 
-รวม: 173/297 tasks (58%)
+รวม: 174/308 tasks (56%)
+
+### สิ่งที่ทำใน session ล่าสุด (2026-04-02)
+
+UI Redesign ตาม Paper Design:
+- Login page — split screen (navy branding + form)
+- Workspace Selection — cards + stats จาก DB
+- Sidebar — white theme, grouped sections, active state fix
+- Lead Search — 2-panel, auto email enrich, province dropdown 77 จังหวัด, sub-categories multi-select
+- Lead List — filter pills, แยกคอลัมน์อีเมล/เบอร์, bulk หา email
+- Lead Detail — 3-column layout ตาม Paper (profile + notes/tags/tasks + activity timeline)
+- Template List — card grid + category badges + stats
+- Template Editor — 2-panel + variable pills + Desktop/Mobile preview
+- Sequence List — row cards + status badges + stats
+- Sequence Builder — visual timeline + settings sidebar
+- Campaign List — table rows + avatar + filters + pagination
+- Campaign Detail — 5 stat cards + progress bar + sidebar + recipients
+- Create Campaign — step indicator + template sidebar + audience filter
+
+New Features:
+- Social Media Finder — Python API `POST /api/v1/social/find` (Facebook Page + LINE OA scraping)
+- Auto email enrichment ระหว่างค้นหา lead
+- Coming Soon component + Help page
+- Province dropdown ค้นหาได้ (77 จังหวัด + ย่าน)
+- Lead Detail TODO.md — รายการ mock/placeholder features
+
+Bug Fixes:
+- review_count NOT NULL → fallback 0
+- StarRating null crash
+- Email finder response format (emails vs emails_found)
+- Enrichment schema confidence 0-100
+- Hydration error (button nesting)
+- Sidebar active state overlap
+- Places API regionCode TH
 
 ### Phase 3 — สิ่งที่ทำใน session นี้ (2026-03-12)
 tRPC Routers ใหม่:
@@ -662,6 +695,14 @@ Documentation: See `E2E_TEST_SUMMARY.md` for full details and test execution com
   - campaign.previewAudience: audience count preview ✓
   - campaign.pause/cancel: status management ✓
   - **18 tests passed** ✓
+
+### Phase 4 — Testing Campaign Router: Results (2026-03-15)
+✅ **Campaign Router Unit Tests: 18/18 PASSED**
+- File: `apps/web/src/__tests__/routers/campaign.test.ts`
+- All CRUD operations validated with proper RLS mocking
+- Test coverage: authentication, pagination, filtering, status transitions, audience preview
+- Duration: 16ms
+- E2E tests defined (17 tests in `e2e/campaigns.spec.ts`) but require auth fixture setup for execution
 
 Key improvements:
 - Removed try/catch pattern `expect(error).toBeDefined()`

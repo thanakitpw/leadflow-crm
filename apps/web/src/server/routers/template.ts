@@ -308,15 +308,24 @@ export const templateRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'ไม่พบ template นี้' })
       }
 
-      // Sample data สำหรับทดสอบ
+      // Sample data สำหรับทดสอบ (ทั้ง key ภาษาอังกฤษ และภาษาไทย)
       const sampleData: Record<string, string> = {
         business_name: 'ร้านตัวอย่าง',
-        first_name: 'ทดสอบ',
+        first_name: 'สมชาย',
         location: 'กรุงเทพมหานคร',
         category: 'ร้านอาหาร',
         email: 'test@example.com',
         phone: '02-123-4567',
         website: 'https://example.com',
+        // ภาษาไทย
+        'ชื่อ': 'สมชาย',
+        'ชื่อร้าน': 'ร้านตัวอย่าง',
+        'หมวดหมู่': 'ร้านอาหาร',
+        'ที่อยู่': 'กรุงเทพมหานคร',
+        'อีเมล': 'test@example.com',
+        'เบอร์โทร': '02-123-4567',
+        'เว็บไซต์': 'https://example.com',
+        'คะแนน': '4.5',
       }
 
       // แทนที่ตัวแปรใน subject และ body
@@ -324,19 +333,23 @@ export const templateRouter = router({
       const htmlBody = replaceVariables(template.body_html, sampleData)
 
       // เรียก Python API เพื่อส่ง email
+      const emailPayload = {
+        from_email: DEFAULT_FROM_EMAIL,
+        to_email: input.toEmail,
+        subject,
+        html_body: htmlBody,
+      }
+      console.log('[testSend] Sending to Python API:', PYTHON_API_URL, 'from:', DEFAULT_FROM_EMAIL, 'to:', input.toEmail)
       let response: Response
       try {
         response = await fetch(`${PYTHON_API_URL}/api/v1/email/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from_email: DEFAULT_FROM_EMAIL,
-            to_email: input.toEmail,
-            subject,
-            html_body: htmlBody,
-          }),
+          body: JSON.stringify(emailPayload),
         })
+        console.log('[testSend] Python API response status:', response.status)
       } catch (err) {
+        console.error('[testSend] Failed to connect:', err)
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'ไม่สามารถเชื่อมต่อกับ email service ได้',

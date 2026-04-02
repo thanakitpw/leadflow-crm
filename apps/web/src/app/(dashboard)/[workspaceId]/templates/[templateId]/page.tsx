@@ -150,16 +150,21 @@ export default function TemplateEditorPage() {
       toast.info("กรุณาบันทึกเทมเพลตก่อนส่งทดสอบ")
       return
     }
+    const toEmail = prompt("ส่งอีเมลทดสอบไปที่:")
+    if (!toEmail || !toEmail.includes("@")) return
     setTestSending(true)
     try {
       await trpc.template.testSend.mutate({
         workspaceId,
         templateId,
-        toEmail: "test@leadflow.co.th",
+        toEmail,
       })
-      toast.success("ส่งอีเมลทดสอบแล้ว")
-    } catch {
-      toast.info("ฟีเจอร์ส่งทดสอบจะพร้อมเร็วๆ นี้")
+      toast.success(`ส่งอีเมลทดสอบไปที่ ${toEmail} แล้ว`)
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "message" in err
+        ? String((err as { message: string }).message)
+        : "ไม่สามารถส่งอีเมลทดสอบได้"
+      toast.error(msg)
     } finally {
       setTestSending(false)
     }
